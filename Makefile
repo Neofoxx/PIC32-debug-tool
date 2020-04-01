@@ -10,8 +10,14 @@
 # Makes for one change, instead of 10.
 TARGET = main
 MCU = 32MX440F256H
+MCU_LOWER = 32mx440f256h
 #MCU = 32MX270F256D
-OPTIMIZATION = -O1
+#MCU_LOWER = 32mx270f256d
+
+#BOOTLOADER = ""
+BOOTLOADER = _pinguino
+
+OPTIMIZATION = -Os
 CRYSTALFREQUENCY = 8000000L
 MIN_HEAP_SIZE = _min_heap_size=2048
 
@@ -28,9 +34,8 @@ SIZE = mipsel-elf-size
 
 # The rest from here should automatically discern the needed scipts
 
-
 MCU_XC = __$(strip $(MCU))__	# Convert to form used by xc.h. 
-MCU_ASM_FILE = p$(MCU).S		# Definitions have a p prefix, and .S suffix
+MCU_ASM_FILE = p$(MCU_LOWER).S		# Definitions have a p prefix, and .S suffix
 
 # Extract information about the family automatically.
 ifeq ($(findstring 32MM, $(MCU)), 32MM)
@@ -46,9 +51,7 @@ endif
 
 
 
-
-
-LDSCRIPTS = -T$(P32M_TOOLCHAIN_PATH)/proc/$(MCU)/procdefs.ld -T$(P32M_TOOLCHAIN_PATH)/ldscripts/$(LDSCRIPT_USED)
+LDSCRIPTS = -T$(P32M_TOOLCHAIN_PATH)/proc/$(MCU)/procdefs$(BOOTLOADER).ld -T$(P32M_TOOLCHAIN_PATH)/ldscripts/$(LDSCRIPT_USED)
 STARTUPSCRIPTS = $(P32M_TOOLCHAIN_PATH)/libpic32/startup/crt0.S $(P32M_TOOLCHAIN_PATH)/libpic32/startup/general-exception.S
 INTERRUPTSCRIPT = $(P32M_TOOLCHAIN_PATH)/include/support/interrupt/interrupt.S	# The new isrwrapper/interrupt system
 # Added build dir to LDFLAGS, so xc.h can find processor.o
@@ -80,7 +83,8 @@ flash:
 	$(PIC32PROG_PATH)/pic32prog $(BUILD_DIR)/$(TARGET).hex -D -S -s 8000
 
 flash_icsp:
-	$(PIC32PROG_PATH)/pic32prog $(BUILD_DIR)/$(TARGET).hex -D -S -i ICSP -s 8000
+	$(PIC32PROG_PATH)/pic32prog $(BUILD_DIR)/$(TARGET).hex -D -S -i ICSP -
+s 8000
 
 
 # For debug, recursively call the makefile again, with the DEBUG varible

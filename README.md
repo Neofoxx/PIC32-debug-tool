@@ -19,6 +19,18 @@ The USB code works on both chips above. Currently implemented is a very basic US
 
 Schematics and connections to be added as project progresses.
 
-### FYI
+### Building
 
-The Makefile currently expects the .S files to be uppercase, while the toolchain has them in lowercase.
+To select the build configuration, look into the `Makefile`, and select the variables based on your MCU: `MCU` and `MCU_LOWER`. Select the `BOOTLOADER` variable appropriately.
+
+To build in your environment:
+
+```
+P32M_TOOLCHAIN_PATH=path/to/pic32-parts-free make
+```
+
+This will result in a file called `build/main.hex`. Flash it using pic32prog, and make sure that the directory with pic32prog is in your `$PATH`. If using a USB boot loader, the call is rather simple:
+
+```
+pic32prog build/main.hex
+```
