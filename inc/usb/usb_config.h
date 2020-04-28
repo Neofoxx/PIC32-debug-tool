@@ -22,17 +22,20 @@
 #ifndef USB_CONFIG_H__
 #define USB_CONFIG_H__
 
+#define MULTI_CLASS_DEVICE	// Support for multiple classes, added as per main.c
+
 /* Number of endpoint numbers besides endpoint zero. It's worth noting that
    and endpoint NUMBER does not completely describe an endpoint, but the
    along with the DIRECTION does (eg: EP 1 IN).  The #define below turns on
    BOTH IN and OUT endpoints for endpoint numbers (besides zero) up to the
    value specified.  For example, setting NUM_ENDPOINT_NUMBERS to 2 will
    activate endpoints EP 1 IN, EP 1 OUT, EP 2 IN, EP 2 OUT.  */
-#define NUM_ENDPOINT_NUMBERS 2
+#define NUM_ENDPOINT_NUMBERS 4
 
 /* Only 8, 16, 32 and 64 are supported for endpoint zero length. */
 #define EP_0_LEN 8
 
+// FIRST CDC interface
 #define EP_1_OUT_LEN 1
 #define EP_1_IN_LEN 10 /* May need to be longer, depending
                         * on the notifications you support. */
@@ -40,6 +43,14 @@
 #define EP_2_LEN 64
 #define EP_2_OUT_LEN EP_2_LEN
 #define EP_2_IN_LEN EP_2_LEN
+
+// SECOND CDC interface
+#define EP_3_OUT_LEN 1
+#define EP_3_IN_LEN 10 /* May need to be longer, depending
+                        * on the notifications you support. */
+#define EP_4_LEN 64		// Assume IN and OUT are the same length
+#define EP_4_OUT_LEN EP_2_LEN
+#define EP_4_IN_LEN EP_2_LEN
 
 #define NUMBER_OF_CONFIGURATIONS 1
 

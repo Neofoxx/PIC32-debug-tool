@@ -39,6 +39,9 @@
 #include <stdint.h>
 #include "usb_config.h"
 
+
+void cdc_set_interface_list(uint8_t *interfaces, uint8_t num_interfaces);
+
 // TODO See usb_microsoft.h for what to TODO
 #pragma pack(push, 1)
 

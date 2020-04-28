@@ -30,8 +30,9 @@
 
 volatile char tempArray[128];
 volatile uint8_t lengthArray = 0;
+
 #ifdef MULTI_CLASS_DEVICE
-static uint8_t cdc_interfaces[] = { 0 };
+static uint8_t cdc_interfaces[] = { 0, 1 };
 #endif
 
 // TODO - run the timer, like in MX440 example (SysTick style)
@@ -107,6 +108,7 @@ int main(){
 
 
 	setup();
+	cdc_set_interface_list(cdc_interfaces, 2);
 	usb_init();
 
 	// A very basic USB-UART example.
