@@ -31,8 +31,14 @@
 volatile char tempArray[128];
 volatile uint8_t lengthArray = 0;
 
+volatile uint8_t PROG_EP_OUT[128];
+volatile uint8_t UART_EP_OUT[128];
+volatile uint8_t PROG_EP_OUT_LEN;
+volatile uint8_t UART_EP_OUT_LEN;
+
+
 #ifdef MULTI_CLASS_DEVICE
-static uint8_t cdc_interfaces[] = { 0, 1 };
+static uint8_t cdc_interfaces[] = { 0, 2 };	// Uhh....??
 #endif
 
 // TODO - run the timer, like in MX440 example (SysTick style)
@@ -120,119 +126,6 @@ int main(){
 		// Nothing yet
 
 		COMMS_handleIncomingProg();
-
-		/*
-		GPIODrv_setupPinTCK(GPIO_mode_output_high);
-
-		// 1x
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-
-		// 2x
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-
-		// 4x
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_LOW);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		GPIODrv_setStateTCK(GPIO_HIGH);
-		*/
-		/*
-		// 1x
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-
-		// 2x
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-
-		// 4x
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATCLR = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		PROG_TCK_LATSET = PROG_TCK_MASK;
-		 */
 
 
 		#ifndef USB_USE_INTERRUPTS
@@ -387,7 +280,128 @@ int8_t app_send_break_callback(uint8_t interface, uint16_t duration)
 #ifdef USB_USE_INTERRUPTS
 INTERRUPT(USB1Interrupt){
 	usb_service();
-	COMMS_addToInputBuffer();
+	//COMMS_addToInputBuffer();
+
+	////////////////////////////////////////////////////////////
+	// Get data from EP2 OUT (programmer, PC to us)
+	////////////////////////////////////////////////////////////
+	if (usb_is_configured() && !usb_out_endpoint_halted(2) && usb_out_endpoint_has_data(2) && !usb_in_endpoint_busy(4)) {
+		const unsigned char *out_buf;
+		volatile size_t out_buf_len;
+		uint16_t counter = 0;
+
+		// Check for an empty transaction.
+		out_buf_len = usb_get_out_buffer(2, &out_buf);
+		if (out_buf_len <= 0){
+			// Let's avoid gotos
+			usb_arm_out_endpoint(2);
+		}
+		else{
+			LED_toggle();
+
+			for (counter = 0; counter < out_buf_len; counter++){
+				PROG_EP_OUT[counter] = out_buf[counter];
+			}
+			PROG_EP_OUT_LEN = out_buf_len;
+
+			usb_arm_out_endpoint(2);
+		}
+	}
+
+
+	// Get data from EP4 OUT (USB-UART, PC to us)
+	if (usb_is_configured() && !usb_out_endpoint_halted(4) && usb_out_endpoint_has_data(4) && !usb_in_endpoint_busy(2)) {
+			const unsigned char *out_buf;
+			volatile size_t out_buf_len;
+			uint16_t counter = 0;
+
+			// Check for an empty transaction.
+			out_buf_len = usb_get_out_buffer(4, &out_buf);
+			if (out_buf_len <= 0){
+				// Let's avoid gotos
+				usb_arm_out_endpoint(4);
+			}
+			else{
+				LED_toggle();
+
+				for (counter = 0; counter < out_buf_len; counter++){
+					UART_EP_OUT[counter] = out_buf[counter];
+				}
+				UART_EP_OUT_LEN = out_buf_len;
+
+				usb_arm_out_endpoint(4);
+			}
+		}
+
+	// Post data to EP2 IN (programmer, us to PC)
+	if (usb_is_configured() && !usb_in_endpoint_halted(2)){
+		while (usb_in_endpoint_busy(2)){
+		}
+		uint32_t i = UART_EP_OUT_LEN;
+		uint8_t *buf;
+
+		while (i>0){
+			buf = usb_get_in_buffer(2);
+			if (i>=EP_2_LEN){
+				memcpy(buf, &(UART_EP_OUT[UART_EP_OUT_LEN - i]), EP_2_LEN);
+				usb_send_in_buffer(2, EP_2_LEN);	// Send on endpoint 2, of length i
+
+				if (i==EP_2_LEN){
+					// If we land on boundary, send a zero-length packet
+					while (usb_in_endpoint_busy(2)){
+					}
+					usb_send_in_buffer(2, 0);
+				}
+				i = i - EP_2_LEN;
+				while (usb_in_endpoint_busy(2)){
+				}
+			}
+			else{
+				memcpy(buf, &(UART_EP_OUT[UART_EP_OUT_LEN - i]), i);
+				usb_send_in_buffer(2, i);
+				while (usb_in_endpoint_busy(2)){
+				}
+				i = i - i;
+			}
+		}
+		UART_EP_OUT_LEN = 0;
+
+	}
+
+	// Post data to EP4 IN (USB-UART, us to PC
+	if (usb_is_configured() && !usb_in_endpoint_halted(4)){
+		while (usb_in_endpoint_busy(4)){
+		}
+		uint32_t i = PROG_EP_OUT_LEN;
+		uint8_t *buf;
+
+		while (i>0){
+			buf = usb_get_in_buffer(4);
+			if (i>=EP_4_LEN){
+				memcpy(buf, &(PROG_EP_OUT[PROG_EP_OUT_LEN - i]), EP_4_LEN);
+				usb_send_in_buffer(4, EP_4_LEN);	// Send on endpoint 4, of length i
+
+				if (i==EP_4_LEN){
+					// If we land on boundary, send a zero-length packet
+					while (usb_in_endpoint_busy(4)){
+					}
+					usb_send_in_buffer(4, 0);
+				}
+				i = i - EP_4_LEN;
+				while (usb_in_endpoint_busy(4)){
+				}
+			}
+			else{
+				memcpy(buf, &(PROG_EP_OUT[PROG_EP_OUT_LEN - i]), i);
+				usb_send_in_buffer(4, i);
+				while (usb_in_endpoint_busy(4)){
+				}
+				i = i - i;
+			}
+		}
+		PROG_EP_OUT_LEN = 0;
+	}
+
 }
 #endif
 
