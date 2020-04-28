@@ -110,13 +110,6 @@ uint64_t transportSendICSP(	uint32_t tms_header_nbits, uint32_t tms_header_val,
 
 	volatile uint64_t returnVal = 0;
 	volatile uint32_t counterOfBits = 0;
-	volatile wtfTemp = tms_header_val;
-	volatile wtfTempTwo = data_val;
-	volatile wtfTempThree = tms_epilogue_val;
-	volatile wtfTempFour = tms_header_nbits;
-	volatile wtfTempFive = data_nbits;
-	volatile wtfTempSix = tms_epilogue_nbits;
-
 
 	if (tms_header_val == 0x1F){
 		asm("nop");

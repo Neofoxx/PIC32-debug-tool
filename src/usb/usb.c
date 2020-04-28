@@ -1235,6 +1235,7 @@ static inline void handle_ep0_out()
 
 				if (bytes_to_copy < pkt_len) {
 					/* The buffer provided by the application was too short */
+					// NFX - or possibly data wasn't handled yet? In which case we should NAK, not STALL, and let the host resend data.
 					stall_ep0();
 					if (ep0_data_stage_callback)
 						ep0_data_stage_callback(0/*false*/, ep0_data_stage_context);

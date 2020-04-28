@@ -13,7 +13,7 @@
 #define status_overflow		3
 
 typedef struct commStruct{
-	uint8_t data[1024];			// Data received
+	uint8_t data[2048];			// Data received
 	uint16_t head;				// Circular buffer
 	uint16_t tail;				// Circular buffer
 	uint16_t currentPos;		// Current position in data buffer, with crc
@@ -31,6 +31,10 @@ void COMMS_handleIncomingProg(void);
 void COMMS_commandExecutor(void);
 void COMMS_addInfoToOutput(void);
 void COMMS_addToInputBuffer(void);
+
+
+void COMMS_pic32SendCommand(uint32_t command);
+uint64_t COMMS_pic32XferData(uint32_t nBits, uint32_t data, uint32_t readFlag);
 
 
 #endif

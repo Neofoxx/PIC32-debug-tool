@@ -93,12 +93,17 @@ void UARTDrv_SendBlocking(uint8_t * buffer, uint32_t length){
 	for (counter = 0; counter<length; counter++){
 		while(UART_STA_bits.UTXBF){ asm("nop"); }
 		UART_TX_reg = buffer[counter];
+		asm("nop");
 	}
 
 	// Wait until sent
+	// Fucking errata.
+	/*
 	while(UART_STA_bits.TRMT){
 		_nop();
+		asm("nop");
 	}
+	*/
 }
 
 uint32_t UARTDrv_GetCount(){

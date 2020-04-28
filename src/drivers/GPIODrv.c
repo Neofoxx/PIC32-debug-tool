@@ -99,6 +99,7 @@ void GPIODrv_setStateTMS(uint32_t state){
 	}
 }
 
+
 void GPIODrv_setStateTCK(uint32_t state){
 	if (state == GPIO_HIGH){
 		PROG_TCK_LATSET = PROG_TCK_MASK;
@@ -107,6 +108,7 @@ void GPIODrv_setStateTCK(uint32_t state){
 		PROG_TCK_LATCLR = PROG_TCK_MASK;
 	}
 }
+
 
 void GPIODrv_setStateTDI(uint32_t state){
 	if (state == GPIO_HIGH){

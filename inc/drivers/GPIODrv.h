@@ -175,7 +175,18 @@ void GPIODrv_setupPinTDO(uint32_t mode);
 void GPIODrv_setupPinMCLR(uint32_t mode);
 
 void GPIODrv_setStateTMS(uint32_t state);
+// Optimize later. Static inline works just fine (and too fast :p)
 void GPIODrv_setStateTCK(uint32_t state);
+/*
+static inline void GPIODrv_setStateTCK(uint32_t state){
+	if (state == GPIO_HIGH){
+		PROG_TCK_LATSET = PROG_TCK_MASK;
+	}
+	else{
+		PROG_TCK_LATCLR = PROG_TCK_MASK;
+	}
+}
+*/
 void GPIODrv_setStateTDI(uint32_t state);
 void GPIODrv_setStateTDO(uint32_t state);
 void GPIODrv_setStateMCLR(uint32_t state);

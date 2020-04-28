@@ -8,6 +8,7 @@
 #include <UARTDrv.h>
 #include <transport.h>
 #include <GPIODrv.h>
+#include <pic32_prog_definitions.h>
 
 // This file handles communication
 // - USB-UART will be one type.
@@ -22,8 +23,8 @@ commStruct outgoingData= {
 		{0}, 0, 0, 0, 0, 0, 0
 };
 
-uint8_t tempBuffer[256];
-uint8_t uartBuffer[256];
+uint8_t tempBuffer[2048];
+uint8_t uartBuffer[2048];
 
 void COMMS_reinitStruct(commStruct *st, uint32_t cleanAll){
 	//memset(st->data, 0, sizeof(st->data));
@@ -181,12 +182,15 @@ void COMMS_handleIncomingProg(void){
 												"Got a packet with a valid CRC\n");
 					UARTDrv_SendBlocking(uartBuffer, temp);
 
-					// At this point, go and do something about all of the commands.
+					// At this point, go and do something about ALL of the commands.
 					COMMS_commandExecutor();
 
 					// Clear structures
 					COMMS_reinitStruct(&incomingData, 0);
 					COMMS_reinitStruct(&outgoingData, 0);
+					temp = snprintf(	(char *)uartBuffer, sizeof(uartBuffer),
+												"Reinited structures\n");
+										UARTDrv_SendBlocking(uartBuffer, temp);
 					break;
 				}
 				else{
@@ -236,7 +240,13 @@ void COMMS_addInfoToOutput(){
 }
 
 // Make different later?
-void COMMS_addDataToOutput(uint64_t data){
+void COMMS_addDataToOutput_64b(uint64_t data){
+	memcpy (&outgoingData.data[outgoingData.currentPos], &data, sizeof(data));
+	memcpy (&outgoingData.data[0], &data, sizeof(data));
+	outgoingData.currentPos = outgoingData.currentPos + sizeof(data);
+}
+
+void COMMS_addDataToOutput_32b(uint32_t data){
 	memcpy (&outgoingData.data[outgoingData.currentPos], &data, sizeof(data));
 	memcpy (&outgoingData.data[0], &data, sizeof(data));
 	outgoingData.currentPos = outgoingData.currentPos + sizeof(data);
@@ -260,7 +270,7 @@ void COMMS_commandExecutor(){
 		}
 		else if (COMMAND_SET_SPEED == tempBuffer[counter]){
 			// Currently not supported, so skip
-			// Speed will be in 2 bytes (kHz.
+			// Speed will be in 2 bytes (kHz)
 			counter = counter + 3;
 		}
 		else if (COMMAND_SET_PROG_MODE == tempBuffer[counter]){
@@ -330,6 +340,7 @@ void COMMS_commandExecutor(){
 			}
 
 			// TODO implement return.
+			COMMS_addDataToOutput_32b(returnVal);
 
 			counter = counter + 2;
 		}
@@ -389,15 +400,143 @@ void COMMS_commandExecutor(){
 			}
 
 			if (read_flag > 0){
-				COMMS_reinitStruct(&outgoingData, 1);
-				COMMS_addDataToOutput(returnVal);
-				COMMS_sendStruct(&outgoingData);
-				COMMS_reinitStruct(&outgoingData, 1);
+				COMMS_addDataToOutput_64b(returnVal);
+				// Sending shall be done when parsing the packet is done, or when a special command is parsed.
 			}
+		}
+		else if (COMMAND_XFER_INSTRUCTION == tempBuffer[counter]){
+
+			uint32_t maxCounter = 0;
+			uint32_t maxLimit = 40;	// Just a define
+
+			uint32_t controlVal = 0;
+			uint32_t instruction = 0;
+
+			// instruction is at counter+1
+			memcpy(&instruction, &tempBuffer[counter+1], sizeof(instruction));
+			counter = counter + 1 + sizeof(instruction);
+
+
+			COMMS_pic32SendCommand(ETAP_CONTROL);
+
+			// Wait until CPU is ready
+			// Check if Processor Access bit (bit 18) is set
+			do {
+				controlVal = (uint32_t)COMMS_pic32XferData(32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP | CONTROL_EJTAGBRK), 1);    // Send data, read
+				if (!(controlVal & CONTROL_PROBEN)){
+					// Note - xfer instruction, ctl was %08x\n
+					maxCounter++;
+					if (maxCounter >= maxLimit){
+						// Processor still not ready :/, give up.
+						break;
+					}
+				}
+			} while ( !(controlVal & CONTROL_PROBEN));
+
+			if (maxCounter < maxLimit){
+				// Select Data Register
+				COMMS_pic32SendCommand(ETAP_DATA);    // ETAP_DATA
+
+				/* Send the instruction */
+				COMMS_pic32XferData(32, instruction, 0);  // Send instruction, don't read
+
+				// Tell CPU to execute instruction
+				COMMS_pic32SendCommand(ETAP_CONTROL); // ETAP_CONTROL
+
+				/* Send data. */
+				COMMS_pic32XferData(32, (CONTROL_PROBEN | CONTROL_PROBTRAP), 0);   // Send data, don't read
+
+				// Return status, so application knows what's happening
+				COMMS_addDataToOutput_64b(0);
+			}
+			else{
+				COMMS_addDataToOutput_64b(0x80000000);	// -1 in case of FAIL.
+			}
+
 		}
 		else{
 			asm("nop");
 		}
 
 	}
+
+	// At the END, send everything we have in the outgoing buffer.
+	// If there'll be a "send everything you've got right now" command, then _also_ do it then.
+	COMMS_sendStruct(&outgoingData);
+	COMMS_reinitStruct(&outgoingData, 1);
 }
+
+
+void COMMS_pic32SendCommand(uint32_t command){
+
+	// WTf?
+	// Bi mogoce morali biti == command || ... ???
+	// ... Ja, sam je ista cifra, pa zato dela. ><
+	// fuckit, popravi kasneje.
+
+	uint32_t returnVal;
+
+	if (MTAP_COMMAND != command && TAP_SW_MTAP != command
+		&& TAP_SW_ETAP != command && MTAP_IDCODE != command){   // MTAP commands
+		if (PROG_MODE_TRISTATE == transport_currentMode){
+			// Do nothing?
+		}
+		else if(PROG_MODE_JTAG == transport_currentMode){
+			returnVal = transportSendJTAG(TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
+											MTAP_COMMAND_NBITS, command,
+											TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL);
+		}
+		else if(PROG_MODE_ICSP == transport_currentMode){
+			returnVal = transportSendICSP(TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
+											MTAP_COMMAND_NBITS, command,
+											TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL);
+		}
+
+	}
+	else if (ETAP_ADDRESS != command && ETAP_DATA != command    // ETAP commands
+			&& ETAP_CONTROL != command && ETAP_EJTAGBOOT != command
+			&& ETAP_FASTDATA != command && ETAP_NORMALBOOT != command){
+		if (PROG_MODE_TRISTATE == transport_currentMode){
+			// Do nothing?
+		}
+		else if(PROG_MODE_JTAG == transport_currentMode){
+			returnVal = transportSendJTAG(TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
+											ETAP_COMMAND_NBITS, command,
+											TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL);
+		}
+		else if(PROG_MODE_ICSP == transport_currentMode){
+			returnVal = transportSendICSP(TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
+											ETAP_COMMAND_NBITS, command,
+											TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL);
+		}
+	}
+}
+
+uint64_t COMMS_pic32XferData(uint32_t nBits, uint32_t data, uint32_t readFlag){
+	volatile uint64_t returnVal = 0;
+
+	if (PROG_MODE_TRISTATE == transport_currentMode){
+		// Do nothing?
+	}
+	else if(PROG_MODE_JTAG == transport_currentMode){
+		returnVal = transportSendJTAG(TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
+										nBits, (uint64_t)data,
+										TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL);
+	}
+	else if(PROG_MODE_ICSP == transport_currentMode){
+		returnVal = transportSendICSP(TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
+										nBits, (uint64_t)data,
+										TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL);
+	}
+
+	if (readFlag > 0){
+		return returnVal;
+	}
+
+	return 0;
+}
+
+
+
+
+

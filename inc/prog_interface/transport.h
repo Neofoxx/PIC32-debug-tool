@@ -20,6 +20,8 @@
 #define COMMAND_SET_PIN_WRITE	4	// Write to pin
 #define COMMAND_SET_PIN_READ	5	// Read pin value
 #define COMMAND_SEND			6	// Send command
+#define COMMAND_XFER_INSTRUCTION	7	// xferInstruction, but performed on MCU
+
 
 #define PROG_MODE_TRISTATE	0
 #define PROG_MODE_JTAG		1
