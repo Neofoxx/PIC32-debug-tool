@@ -254,6 +254,7 @@ static struct cdc_line_coding line_coding =
 int8_t app_set_line_coding_callback(uint8_t interface,
                                     const struct cdc_line_coding *coding)
 {
+	// TODO - check which interface, and actually <i>use</i> this. Ditto for some other functions.
 	line_coding = *coding;
 	return 0;
 }
@@ -280,126 +281,80 @@ int8_t app_send_break_callback(uint8_t interface, uint16_t duration)
 #ifdef USB_USE_INTERRUPTS
 INTERRUPT(USB1Interrupt){
 	usb_service();
+	LED_USBINT_toggle();
 	//COMMS_addToInputBuffer();
 
-	////////////////////////////////////////////////////////////
-	// Get data from EP2 OUT (programmer, PC to us)
-	////////////////////////////////////////////////////////////
-	if (usb_is_configured() && !usb_out_endpoint_halted(2) && usb_out_endpoint_has_data(2) && !usb_in_endpoint_busy(4)) {
-		const unsigned char *out_buf;
-		volatile size_t out_buf_len;
-		uint16_t counter = 0;
-
-		// Check for an empty transaction.
-		out_buf_len = usb_get_out_buffer(2, &out_buf);
-		if (out_buf_len <= 0){
-			// Let's avoid gotos
-			usb_arm_out_endpoint(2);
-		}
-		else{
-			LED_toggle();
-
-			for (counter = 0; counter < out_buf_len; counter++){
-				PROG_EP_OUT[counter] = out_buf[counter];
-			}
-			PROG_EP_OUT_LEN = out_buf_len;
-
-			usb_arm_out_endpoint(2);
-		}
+	// All od the cases depend on this anyway.
+	if (!usb_is_configured()){
+		return;
 	}
 
+	// Priorities!
 
-	// Get data from EP4 OUT (USB-UART, PC to us)
-	if (usb_is_configured() && !usb_out_endpoint_halted(4) && usb_out_endpoint_has_data(4) && !usb_in_endpoint_busy(2)) {
-			const unsigned char *out_buf;
-			volatile size_t out_buf_len;
-			uint16_t counter = 0;
+	// 1. We have one IN (us->PC) endpoint for USB-UART. This one must have high throughput, but can have bigger latency
+	// 4. The OUT (PC->us) endpoint for USB-UART has got the short straw, when it happens it happens.
 
-			// Check for an empty transaction.
-			out_buf_len = usb_get_out_buffer(4, &out_buf);
-			if (out_buf_len <= 0){
-				// Let's avoid gotos
-				usb_arm_out_endpoint(4);
-			}
-			else{
-				LED_toggle();
+	// 3. We have one IN (us->PC) endpoint for the programmer - low-ish throughput, medium latency?
+	// 2. We have one OUT (PC->us) endpoint for the programmer - medium throughput, low latency desired
 
-				for (counter = 0; counter < out_buf_len; counter++){
-					UART_EP_OUT[counter] = out_buf[counter];
-				}
-				UART_EP_OUT_LEN = out_buf_len;
+	// So, uh, we can send MORE than 64B in one 1ms time slot.
+	// The trick is to limit the number of packets to <19, or something like that.
+	// Let's limit it to 8 packets (8*64 = 512B), which should be quite a lot.
 
-				usb_arm_out_endpoint(4);
-			}
+	////////////////////////////////////////////////////////////
+	// 1. Push data to EP4 IN (UART, us to PC)
+	////////////////////////////////////////////////////////////
+
+	// Post data to EP4 IN (USB-UART, us to PC)
+	// This gets posted if >=512B in buffer, or >=x ms passed.
+	if (!usb_in_endpoint_halted(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM) // Added in_ep_busy. Check later.
+			&& ((COMMS_helper_dataLen(uartRXstruct) >= 512) || (COMMS_helper_timeSinceSent(uartRXstruct) > 10)) ){
+
+		LED_USBUART_IN_toggle();
+		COMMS_USB_uartRX_transmitBuf();
+
+	}
+
+	////////////////////////////////////////////////////////////
+	// 2. Get data from EP2 OUT (programmer, PC to us)
+	////////////////////////////////////////////////////////////
+	if (!usb_out_endpoint_halted(EP_PROG_NUM) && usb_out_endpoint_has_data(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)) {
+
+		LED_USBPROG_OUT_toggle();
+
+		if (COMMS_progOUT_addToBuf() == 0){
+			usb_arm_out_endpoint(EP_PROG_NUM);
 		}
+
+	}
+
+	////////////////////////////////////////////////////////////
+	// 3. Push data to EP2 IN (programmer, us to PC)
+	////////////////////////////////////////////////////////////
 
 	// Post data to EP2 IN (programmer, us to PC)
-	if (usb_is_configured() && !usb_in_endpoint_halted(2)){
-		while (usb_in_endpoint_busy(2)){
-		}
-		uint32_t i = UART_EP_OUT_LEN;
-		uint8_t *buf;
+	if (!usb_in_endpoint_halted(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)){ // Added in_ep_busy. Check later.
 
-		while (i>0){
-			buf = usb_get_in_buffer(2);
-			if (i>=EP_2_LEN){
-				memcpy(buf, &(UART_EP_OUT[UART_EP_OUT_LEN - i]), EP_2_LEN);
-				usb_send_in_buffer(2, EP_2_LEN);	// Send on endpoint 2, of length i
+		LED_USBPROG_IN_toggle();
 
-				if (i==EP_2_LEN){
-					// If we land on boundary, send a zero-length packet
-					while (usb_in_endpoint_busy(2)){
-					}
-					usb_send_in_buffer(2, 0);
-				}
-				i = i - EP_2_LEN;
-				while (usb_in_endpoint_busy(2)){
-				}
-			}
-			else{
-				memcpy(buf, &(UART_EP_OUT[UART_EP_OUT_LEN - i]), i);
-				usb_send_in_buffer(2, i);
-				while (usb_in_endpoint_busy(2)){
-				}
-				i = i - i;
-			}
-		}
-		UART_EP_OUT_LEN = 0;
+		COMMS_USB_progRET_transmitBuf();
 
 	}
 
-	// Post data to EP4 IN (USB-UART, us to PC
-	if (usb_is_configured() && !usb_in_endpoint_halted(4)){
-		while (usb_in_endpoint_busy(4)){
-		}
-		uint32_t i = PROG_EP_OUT_LEN;
-		uint8_t *buf;
 
-		while (i>0){
-			buf = usb_get_in_buffer(4);
-			if (i>=EP_4_LEN){
-				memcpy(buf, &(PROG_EP_OUT[PROG_EP_OUT_LEN - i]), EP_4_LEN);
-				usb_send_in_buffer(4, EP_4_LEN);	// Send on endpoint 4, of length i
+	////////////////////////////////////////////////////////////
+	// 4. Get data from EP4 OUT (UART, PC to us)
+	////////////////////////////////////////////////////////////
 
-				if (i==EP_4_LEN){
-					// If we land on boundary, send a zero-length packet
-					while (usb_in_endpoint_busy(4)){
-					}
-					usb_send_in_buffer(4, 0);
-				}
-				i = i - EP_4_LEN;
-				while (usb_in_endpoint_busy(4)){
-				}
-			}
-			else{
-				memcpy(buf, &(PROG_EP_OUT[PROG_EP_OUT_LEN - i]), i);
-				usb_send_in_buffer(4, i);
-				while (usb_in_endpoint_busy(4)){
-				}
-				i = i - i;
-			}
+	// Get data from EP4 OUT (USB-UART, PC to us)
+	if (!usb_out_endpoint_halted(EP_UART_NUM) && usb_out_endpoint_has_data(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM)) {
+
+		LED_USBUART_OUT_toggle();
+
+		if (COMMS_uartTX_addToBuf() == 0){
+			usb_arm_out_endpoint(EP_UART_NUM);
 		}
-		PROG_EP_OUT_LEN = 0;
+
 	}
 
 }
