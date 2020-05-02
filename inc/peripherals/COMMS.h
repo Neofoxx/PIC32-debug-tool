@@ -25,7 +25,7 @@ typedef struct comStruct{
 	uint16_t head;
 	uint16_t tail;
 	uint32_t timeStamp;
-	// Add size of last sent?
+	uint16_t sizeLastSent;
 } comStruct;
 
 extern comStruct uartRXstruct;	// Target to PC
