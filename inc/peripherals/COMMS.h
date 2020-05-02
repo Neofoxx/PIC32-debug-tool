@@ -35,6 +35,7 @@ typedef struct comStruct{
 	uint8_t data[cyclicBufferSize];
 	uint16_t head;
 	uint16_t tail;
+	uint32_t timeStamp;
 	// Add size of last sent?
 } comStruct;
 

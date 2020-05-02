@@ -60,65 +60,69 @@ uint32_t COMMS_USB_uartRX_transmitBuf(){
 	// Called from USB routine, to send data we received from target
 	while (usb_in_endpoint_busy(EP_UART_NUM)){
 	}
-	uint32_t i = PROG_EP_OUT_LEN;
+
+	comStruct* whichStruct = &uartRXstruct;	// Copy&paste error protection
+	uint32_t sizeToSend = COMMS_helper_dataLen(whichStruct);
 	uint8_t *buf;
+	if (sizeToSend>512){
+		sizeToSend=8*64;	// Limit to number of packets
+	}
 
-	while (i>0){
+	while (sizeToSend>0){
+		LED_USBUART_IN_toggle();	// Toggle on each send, for nicer debugging
+
 		buf = usb_get_in_buffer(EP_UART_NUM);
-		if (i>=EP_UART_NUM_LEN){
-			memcpy(buf, &(PROG_EP_OUT[PROG_EP_OUT_LEN - i]), EP_UART_NUM_LEN);
-			usb_send_in_buffer(EP_UART_NUM, EP_UART_NUM_LEN);	// Send on endpoint 4, of length i
+		if (sizeToSend>=EP_UART_NUM_LEN){
+			COMMS_helper_getData(whichStruct, EP_UART_NUM_LEN, buf);
+			usb_send_in_buffer(EP_UART_NUM, EP_UART_NUM_LEN);	// Send on endpoint EP_UART_NUM, of length EP_UART_NUM_LEN
 
-			if (i==EP_UART_NUM_LEN){
+			while (usb_in_endpoint_busy(EP_UART_NUM)){
+			}
+
+			if (sizeToSend==EP_UART_NUM_LEN){
 				// If we land on boundary, send a zero-length packet
-				while (usb_in_endpoint_busy(4)){
-				}
-				usb_send_in_buffer(4, 0);
+				usb_send_in_buffer(EP_UART_NUM, 0);
 			}
-			i = i - EP_UART_NUM_LEN;
-			while (usb_in_endpoint_busy(4)){
-			}
+			sizeToSend = sizeToSend - EP_UART_NUM_LEN;
 		}
 		else{
-			memcpy(buf, &(PROG_EP_OUT[PROG_EP_OUT_LEN - i]), i);
-			usb_send_in_buffer(4, i);
-			while (usb_in_endpoint_busy(4)){
+			COMMS_helper_getData(whichStruct, sizeToSend, buf);
+			usb_send_in_buffer(EP_UART_NUM, sizeToSend);
+			while (usb_in_endpoint_busy(EP_UART_NUM)){
 			}
-			i = i - i;
+			sizeToSend = sizeToSend - sizeToSend;
 		}
 	}
-	PROG_EP_OUT_LEN = 0;
-	// NOTE - don't forget to mark size_last_sent, 'cos if EP_x_LEN, and no more data, <i>must</i> send packet of 0!
+
+	whichStruct->timeStamp = _CP0_GET_COUNT();
 }
 
 // UART TX - add data from USB to UART TX
 uint32_t COMMS_uartTX_addToBuf(uint8_t* buffer, uint16_t size){
 	// Called from USB, to gives us data from PC
-
+	comStruct* whichStruct = &uartTXstruct;	// Copy&paste error protection
 	const unsigned char *out_buf;
 	volatile size_t out_buf_len;
 	uint16_t counter = 0;
 
+	LED_USBUART_OUT_toggle();	// Debug toggle
+
 	// Check for an empty transaction.
-	out_buf_len = usb_get_out_buffer(4, &out_buf);
-	if (out_buf_len <= 0){
-		// Let's avoid gotos
-		usb_arm_out_endpoint(4);
+	out_buf_len = usb_get_out_buffer(EP_UART_NUM, &out_buf);
+	if ( (out_buf_len <= 0)){
+		return 1;	// Rearms in interrupt handler.
 	}
 	else{
-		LED_toggle();
+		LED_USBUART_OUT_toggle();	// Debug toggle
 
-		for (counter = 0; counter < out_buf_len; counter++){
-			UART_EP_OUT[counter] = out_buf[counter];
+		if (COMMS_helper_addToBuf(whichStruct, out_buf, out_buf_len)){
+			return 1;	// If no space, signal, that it shouldn't rearm the endpoint.
 		}
-		UART_EP_OUT_LEN = out_buf_len;
-
-		usb_arm_out_endpoint(4);
 	}
 
+	whichStruct->timeStamp = _CP0_GET_COUNT();
 	return 0;	// 0 on success, else otherwise (no more space, PC will buffer for us :3)
 
-	// TODO IMPLEMENT
 }
 
 void COMMS_uartTX_transmitBuf(){
@@ -133,82 +137,110 @@ void COMMS_uartTX_transmitBuf(){
 // FUNCTIONS PROGRAMMER
 uint32_t COMMS_progOUT_addToBuf(){
 	// Called from USB, to gives us data from PC
+	comStruct* whichStruct = &progOUTstruct;	// Copy&paste error protection
 	const unsigned char *out_buf;
 	volatile size_t out_buf_len;
 	uint16_t counter = 0;
 
+	LED_USBPROG_OUT_toggle();	// Debug toggle
+
 	// Check for an empty transaction.
-	out_buf_len = usb_get_out_buffer(2, &out_buf);
-	if (out_buf_len <= 0){
-		// Let's avoid gotos
-		usb_arm_out_endpoint(2);
+	out_buf_len = usb_get_out_buffer(EP_PROG_NUM, &out_buf);
+	if ( (out_buf_len <= 0)){
+		return 1;	// Rearms in interrupt handler.
 	}
 	else{
-		LED_toggle();
+		LED_USBPROG_OUT_toggle();	// Debug toggle
 
-		for (counter = 0; counter < out_buf_len; counter++){
-			PROG_EP_OUT[counter] = out_buf[counter];
+		if (COMMS_helper_addToBuf(whichStruct, out_buf, out_buf_len)){
+			return 1;	// If no space, signal, that it shouldn't rearm the endpoint.
 		}
-		PROG_EP_OUT_LEN = out_buf_len;
-
-		usb_arm_out_endpoint(2);
 	}
 
+	whichStruct->timeStamp = _CP0_GET_COUNT();
 	return 0;	// 0 on success, else otherwise (no more space, PC will buffer for us :3)
 }
 
 
 void COMMS_USB_progRET_transmitBuf(){
-	// Called from USB routine, to send data we received from target
-	if (!usb_in_endpoint_halted(2)){
-		while (usb_in_endpoint_busy(2)){
-		}
-		uint32_t i = UART_EP_OUT_LEN;
-		uint8_t *buf;
-
-		while (i>0){
-			buf = usb_get_in_buffer(2);
-			if (i>=EP_2_LEN){
-				memcpy(buf, &(UART_EP_OUT[UART_EP_OUT_LEN - i]), EP_2_LEN);
-				usb_send_in_buffer(2, EP_2_LEN);	// Send on endpoint 2, of length i
-
-				if (i==EP_2_LEN){
-					// If we land on boundary, send a zero-length packet
-					while (usb_in_endpoint_busy(2)){
-					}
-					usb_send_in_buffer(2, 0);
-				}
-				i = i - EP_2_LEN;
-				while (usb_in_endpoint_busy(2)){
-				}
-			}
-			else{
-				memcpy(buf, &(UART_EP_OUT[UART_EP_OUT_LEN - i]), i);
-				usb_send_in_buffer(2, i);
-				while (usb_in_endpoint_busy(2)){
-				}
-				i = i - i;
-			}
-		}
-		UART_EP_OUT_LEN = 0;
-
+	// Called from USB routine, to send data from the programmer to PC
+	while (usb_in_endpoint_busy(EP_PROG_NUM)){
 	}
 
-	// NOTE - don't forget to mark size_last_sent, 'cos if EP_x_LEN, and no more data, <i>must</i> send packet of 0!
+	comStruct* whichStruct = &progRETstruct;	// Copy&paste error protection
+	uint32_t sizeToSend = COMMS_helper_dataLen(whichStruct);
+	uint8_t *buf;
+	if (sizeToSend>512){
+		sizeToSend=8*64;	// Limit to number of packets
+	}
+
+	while (sizeToSend>0){
+		LED_USBPROG_IN_toggle();	// Toggle on each send, for nicer debugging
+
+		buf = usb_get_in_buffer(EP_PROG_NUM);
+		if (sizeToSend>=EP_PROG_NUM_LEN){
+			COMMS_helper_getData(whichStruct, EP_PROG_NUM_LEN, buf);
+			usb_send_in_buffer(EP_PROG_NUM, EP_PROG_NUM_LEN);	// Send on endpoint EP_PROG_NUM, of length EP_PROG_NUM_LEN
+
+			while (usb_in_endpoint_busy(EP_PROG_NUM)){
+			}
+
+			if (sizeToSend==EP_PROG_NUM_LEN){
+				// If we land on boundary, send a zero-length packet
+				usb_send_in_buffer(EP_PROG_NUM, 0);
+			}
+			sizeToSend = sizeToSend - EP_PROG_NUM_LEN;
+		}
+		else{
+			COMMS_helper_getData(whichStruct, sizeToSend, buf);
+			usb_send_in_buffer(EP_PROG_NUM, sizeToSend);
+			while (usb_in_endpoint_busy(EP_PROG_NUM)){
+			}
+			sizeToSend = sizeToSend - sizeToSend;
+		}
+	}
+
+	whichStruct->timeStamp = _CP0_GET_COUNT();
 }
 
 
 // HELPER FUNCTION
 // helper function to add to buffer, so don't have to deal with hard coded things etc.
-uint32_t COMMS_helper_addToBuf(comStruct* st, uint8_t data, uint16_t size){
+uint32_t COMMS_helper_addToBuf(comStruct* st, uint8_t* data, uint16_t length){
+	if (COMMS_helper_spaceLeft(st) < length){
+		return 1;	// Fail
+	}
+
+	uint32_t i = 0;
+	for (i=0; i < length; i++){
+		st->data[st->head] = data[i];
+		st->head = st->head++ & cyclicBufferSizeMask;
+	}
 
 	return 0; // 0 on success, else otherwise (no space available)
 }
 
 // Returns how much data is in the struct
-uint32_t COMMS_helper_dataLen(comStruct* st){
+inline uint32_t COMMS_helper_dataLen(comStruct* st){
+	return (st->head - st->tail) & cyclicBufferSizeMask;
+}
 
-	return 0;
+// Returns how much space is left in the struct
+inline uint32_t COMMS_helper_spaceLeft(comStruct* st){
+	return (st->tail - st->head - 1) & cyclicBufferSizeMask;
+}
+
+
+
+inline void COMMS_helper_getData(comStruct* st, uint32_t length, uint8_t *buf){
+	if (COMMS_helper_dataLen(st) < length){
+		// Don't do this, check beforehand
+	}
+	uint32_t i = 0;
+	for (i=0; i< length; i++){
+		buf[i] = st->data[st->tail];
+		st->tail = st->tail++ & cyclicBufferSizeMask;
+	}
 }
 
 // Returns how much time has passed, since data last sent
