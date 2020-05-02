@@ -14,18 +14,6 @@
 // - USB-UART will be one type.
 // - USB to programmer will be the other type
 
-// Structures of data. Init with defaults.
-commStruct incomingData = {
-		{0}, 0, 0, 0, 0, 0, 0
-};
-
-commStruct outgoingData= {
-		{0}, 0, 0, 0, 0, 0, 0
-};
-
-uint8_t tempBuffer[2048];
-uint8_t uartBuffer[2048];
-
 // Circular buffers, all same size.
 // uartRX is fed with UART RX DMA. We have to make sure
 // that we send data fast enough, so we don't get buffer
@@ -39,24 +27,11 @@ comStruct uartTXstruct;	// PC to target
 comStruct progOUTstruct;	// PC to target
 comStruct progRETstruct;	// Us to PC (Return values)
 
-void COMMS_reinitStruct(commStruct *st, uint32_t cleanAll){
-	//memset(st->data, 0, sizeof(st->data));
-	if (cleanAll){
-		st->head = 0;
-		st->tail = 0;
-	}
-	st->currentPos		= 0;
-	st->type			= 0;
-	st->expectedLength	= 0;
-	st->crc				= 0;
-	st->status			= 0;
-}
 
 // FUNCTIONS UART
 // Setup UART RX DMA - function in UART Driver - TODO!!
 
-
-uint32_t COMMS_USB_uartRX_transmitBuf(){
+void COMMS_USB_uartRX_transmitBuf(){
 	// Called from USB routine, to send data we received from target
 	while (usb_in_endpoint_busy(EP_UART_NUM)){
 	}
@@ -98,12 +73,12 @@ uint32_t COMMS_USB_uartRX_transmitBuf(){
 }
 
 // UART TX - add data from USB to UART TX
-uint32_t COMMS_uartTX_addToBuf(uint8_t* buffer, uint16_t size){
+uint32_t COMMS_uartTX_addToBuf(){
 	// Called from USB, to gives us data from PC
 	comStruct* whichStruct = &uartTXstruct;	// Copy&paste error protection
 	const unsigned char *out_buf;
 	volatile size_t out_buf_len;
-	uint16_t counter = 0;
+	//uint16_t counter = 0;
 
 	LED_USBUART_OUT_toggle();	// Debug toggle
 
@@ -115,7 +90,7 @@ uint32_t COMMS_uartTX_addToBuf(uint8_t* buffer, uint16_t size){
 	else{
 		LED_USBUART_OUT_toggle();	// Debug toggle
 
-		if (COMMS_helper_addToBuf(whichStruct, out_buf, out_buf_len)){
+		if (COMMS_helper_addToBuf(whichStruct, (uint8_t *)out_buf, out_buf_len)){
 			return 1;	// If no space, signal, that it shouldn't rearm the endpoint.
 		}
 	}
@@ -140,7 +115,7 @@ uint32_t COMMS_progOUT_addToBuf(){
 	comStruct* whichStruct = &progOUTstruct;	// Copy&paste error protection
 	const unsigned char *out_buf;
 	volatile size_t out_buf_len;
-	uint16_t counter = 0;
+	//uint16_t counter = 0;
 
 	LED_USBPROG_OUT_toggle();	// Debug toggle
 
@@ -152,7 +127,7 @@ uint32_t COMMS_progOUT_addToBuf(){
 	else{
 		LED_USBPROG_OUT_toggle();	// Debug toggle
 
-		if (COMMS_helper_addToBuf(whichStruct, out_buf, out_buf_len)){
+		if (COMMS_helper_addToBuf(whichStruct, (uint8_t *)out_buf, out_buf_len)){
 			return 1;	// If no space, signal, that it shouldn't rearm the endpoint.
 		}
 	}
@@ -214,7 +189,7 @@ uint32_t COMMS_helper_addToBuf(comStruct* st, uint8_t* data, uint16_t length){
 	uint32_t i = 0;
 	for (i=0; i < length; i++){
 		st->data[st->head] = data[i];
-		st->head = st->head++ & cyclicBufferSizeMask;
+		st->head = (st->head + 1) & cyclicBufferSizeMask;
 	}
 
 	return 0; // 0 on success, else otherwise (no space available)
@@ -239,12 +214,12 @@ inline void COMMS_helper_getData(comStruct* st, uint32_t length, uint8_t *buf){
 	uint32_t i = 0;
 	for (i=0; i< length; i++){
 		buf[i] = st->data[st->tail];
-		st->tail = st->tail++ & cyclicBufferSizeMask;
+		st->tail = (st->tail + 1) & cyclicBufferSizeMask;
 	}
 }
 
 // Returns how much time has passed, since data last sent
 uint32_t COMMS_helper_timeSinceSent(comStruct* st){
 
-	return 0;
+	return _CP0_GET_COUNT() - st->timeStamp;	// Read2 - read1, should wrap nicely.
 }

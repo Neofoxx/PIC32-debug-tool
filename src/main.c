@@ -33,7 +33,7 @@ volatile uint8_t lengthArray = 0;
 
 
 #ifdef MULTI_CLASS_DEVICE
-static uint8_t cdc_interfaces[] = { 0, 2 };	// Uhh....??
+static uint8_t cdc_interfaces[] = { 0, 2 };	// Interfaces 0 and 2. Each begins at the IAD, and then goes on for 2 interfaces (0 and 1, 2 and 3).
 #endif
 
 // TODO - run the timer, like in MX440 example (SysTick style)
@@ -93,7 +93,7 @@ void setup(){
 
 int main(){
 
-_CP0_GET_COUNT()
+
 	setup();
 	cdc_set_interface_list(cdc_interfaces, 2);
 	usb_init();
@@ -106,7 +106,7 @@ _CP0_GET_COUNT()
 		// Handle data that is to be sent to the PC
 		// Nothing yet
 
-		COMMS_handleIncomingProg();
+		//COMMS_handleIncomingProg();
 
 
 		#ifndef USB_USE_INTERRUPTS
@@ -153,7 +153,7 @@ INTERRUPT(USB1Interrupt){
 	// Post data to EP4 IN (USB-UART, us to PC)
 	// This gets posted if >=512B in buffer, or >=x ms passed.
 	if (!usb_in_endpoint_halted(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM) // Added in_ep_busy. Check later.
-			&& ((COMMS_helper_dataLen(uartRXstruct) >= 512) || (COMMS_helper_timeSinceSent(uartRXstruct) > 10)) ){
+			&& ((COMMS_helper_dataLen(&uartRXstruct) >= 512) || (COMMS_helper_timeSinceSent(&uartRXstruct) > 10)) ){
 		COMMS_USB_uartRX_transmitBuf();
 	}
 

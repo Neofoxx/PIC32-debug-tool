@@ -12,17 +12,6 @@
 #define status_error		2
 #define status_overflow		3
 
-typedef struct commStruct{
-	uint8_t data[2048];			// Data received
-	uint16_t head;				// Circular buffer
-	uint16_t tail;				// Circular buffer
-	uint16_t currentPos;		// Current position in data buffer, with crc
-	uint8_t type;				// Type of request
-	uint16_t expectedLength;	// Length of data altogether, with crc
-	uint8_t crc;				// The crc.
-	uint8_t status;				// Status - ok, error, ?
-
-} commStruct;
 
 #define cyclicBufferSize		1024
 #define cyclicBufferSizeMask	(cyclicBufferSize-1)
@@ -44,7 +33,7 @@ extern comStruct uartTXstruct;	// PC to target
 extern comStruct progOUTstruct;	// PC to target
 extern comStruct progRETstruct;	// Us to PC (Return values)
 
-
+/*
 void COMMS_reinitStruct(commStruct *st, uint32_t cleanAll);
 void COMMS_sendStruct(commStruct *st);
 void COMMS_handleIncomingProg(void);
@@ -55,16 +44,21 @@ void COMMS_addToInputBuffer(void);
 
 void COMMS_pic32SendCommand(uint32_t command);
 uint64_t COMMS_pic32XferData(uint32_t nBits, uint32_t data, uint32_t readFlag);
+*/
 
 // Newer functions
-uint32_t COMMS_USB_uartRX_transmitBuf();
-uint32_t COMMS_uartTX_addToBuf(uint8_t* buffer, uint16_t size);
+void COMMS_USB_uartRX_transmitBuf();
+uint32_t COMMS_uartTX_addToBuf();
 void COMMS_uartTX_transmitBuf();
 uint32_t COMMS_progOUT_addToBuf();
 void COMMS_USB_progRET_transmitBuf();
-uint32_t COMMS_helper_addToBuf(comStruct* st, uint8_t data, uint16_t size);
+uint32_t COMMS_helper_addToBuf(comStruct* st, uint8_t* data, uint16_t length);
 uint32_t COMMS_helper_dataLen(comStruct* st);
 uint32_t COMMS_helper_timeSinceSent(comStruct* st);
+
+uint32_t COMMS_helper_spaceLeft(comStruct* st);
+void COMMS_helper_getData(comStruct* st, uint32_t length, uint8_t *buf);
+
 
 
 #endif
