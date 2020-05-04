@@ -52,17 +52,11 @@ void COMMS_USB_uartRX_transmitBuf(){
 			usb_send_in_buffer(EP_UART_NUM, EP_UART_NUM_LEN);	// Send on endpoint EP_UART_NUM, of length EP_UART_NUM_LEN
 
 			while (usb_in_endpoint_busy(EP_UART_NUM)){
-				asm("nop");
 			}
 
 			if (sizeToSend==EP_UART_NUM_LEN){
 				// If we land on boundary, send a zero-length packet
-				LED_USBPROG_IN_toggle();
 				usb_send_in_buffer(EP_UART_NUM, 0);
-				// ><, forgot
-				while (usb_in_endpoint_busy(EP_UART_NUM)){
-					asm("nop");
-				}
 			}
 			sizeToSend = sizeToSend - EP_UART_NUM_LEN;
 		}
@@ -70,7 +64,6 @@ void COMMS_USB_uartRX_transmitBuf(){
 			COMMS_helper_getData(whichStruct, sizeToSend, buf);
 			usb_send_in_buffer(EP_UART_NUM, sizeToSend);
 			while (usb_in_endpoint_busy(EP_UART_NUM)){
-				asm("nop");
 			}
 			sizeToSend = sizeToSend - sizeToSend;
 		}
@@ -165,17 +158,11 @@ void COMMS_USB_progRET_transmitBuf(){
 			usb_send_in_buffer(EP_PROG_NUM, EP_PROG_NUM_LEN);	// Send on endpoint EP_PROG_NUM, of length EP_PROG_NUM_LEN
 
 			while (usb_in_endpoint_busy(EP_PROG_NUM)){
-				asm("nop");
 			}
 
 			if (sizeToSend==EP_PROG_NUM_LEN){
 				// If we land on boundary, send a zero-length packet
-				LED_USBPROG_IN_toggle();
 				usb_send_in_buffer(EP_PROG_NUM, 0);
-				// ><, forgot
-				while (usb_in_endpoint_busy(EP_PROG_NUM)){
-					asm("nop");
-				}
 			}
 			sizeToSend = sizeToSend - EP_PROG_NUM_LEN;
 		}
@@ -183,7 +170,6 @@ void COMMS_USB_progRET_transmitBuf(){
 			COMMS_helper_getData(whichStruct, sizeToSend, buf);
 			usb_send_in_buffer(EP_PROG_NUM, sizeToSend);
 			while (usb_in_endpoint_busy(EP_PROG_NUM)){
-				asm("nop");
 			}
 			sizeToSend = sizeToSend - sizeToSend;
 		}

@@ -107,52 +107,6 @@ int main(){
 		// Nothing yet
 
 		//COMMS_handleIncomingProg();
-		// If button is pressed, add data to the uart queue for testing, and delay a bit.
-		if (BTN_getStatus()){
-			uint8_t buf[64] = {	0,1,2,3,4,5,6,7,8,9,
-								0,1,2,3,4,5,6,7,8,9,
-								0,1,2,3,4,5,6,7,8,9,
-								0,1,2,3,4,5,6,7,8,9,
-								0,1,2,3,4,5,6,7,8,9,
-								0,1,2,3,4,5,6,7,8,9,
-								0,1,2,3};
-
-			uint8_t bufTwo[64] = {	9,8,7,6,5,4,3,2,1,0,
-									9,8,7,6,5,4,3,2,1,0,
-									9,8,7,6,5,4,3,2,1,0,
-									9,8,7,6,5,4,3,2,1,0,
-									9,8,7,6,5,4,3,2,1,0,
-									9,8,7,6,5,4,3,2,1,0,
-									9,8,7,6};
-
-			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
-			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
-			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
-			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
-			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
-			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
-			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
-			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
-
-			COMMS_helper_addToBuf(&progRETstruct, bufTwo, 64);
-			COMMS_helper_addToBuf(&progRETstruct, bufTwo, 64);
-			COMMS_helper_addToBuf(&progRETstruct, bufTwo, 64);
-			COMMS_helper_addToBuf(&progRETstruct, bufTwo, 64);
-			COMMS_helper_addToBuf(&progRETstruct, bufTwo, 64);
-			COMMS_helper_addToBuf(&progRETstruct, bufTwo, 64);
-			COMMS_helper_addToBuf(&progRETstruct, bufTwo, 64);
-			COMMS_helper_addToBuf(&progRETstruct, bufTwo, 64);
-
-
-
-
-			uint32_t startTime = _CP0_GET_COUNT();
-			/*
-			while (((uint32_t)_CP0_GET_COUNT() - startTime)/40000 < 500){
-				asm("nop");	// Delay for 5000ms
-			}
-			*/
-		}
 
 
 		#ifndef USB_USE_INTERRUPTS
@@ -199,14 +153,14 @@ INTERRUPT(USB1Interrupt){
 	// Post data to EP4 IN (USB-UART, us to PC)
 	// This gets posted if >=512B in buffer, or >=x ms passed.
 	if (!usb_in_endpoint_halted(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM) // Added in_ep_busy. Check later.
-			&& ((COMMS_helper_dataLen(&uartRXstruct) >= 512) || ((COMMS_helper_timeSinceSent(&uartRXstruct) > 10) &&  (COMMS_helper_dataLen(&uartRXstruct) > 0)) ) ){
+			&& ((COMMS_helper_dataLen(&uartRXstruct) >= 512) || (COMMS_helper_timeSinceSent(&uartRXstruct) > 10)) ){
 		COMMS_USB_uartRX_transmitBuf();
 	}
 
 	////////////////////////////////////////////////////////////
 	// 2. Get data from EP2 OUT (programmer, PC to us)
 	////////////////////////////////////////////////////////////
-	else if (!usb_out_endpoint_halted(EP_PROG_NUM) && usb_out_endpoint_has_data(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)) {
+	if (!usb_out_endpoint_halted(EP_PROG_NUM) && usb_out_endpoint_has_data(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)) {
 		if (COMMS_progOUT_addToBuf() == 0){
 			usb_arm_out_endpoint(EP_PROG_NUM);
 		}
@@ -217,7 +171,7 @@ INTERRUPT(USB1Interrupt){
 	////////////////////////////////////////////////////////////
 
 	// Post data to EP2 IN (programmer, us to PC)
-	else if (!usb_in_endpoint_halted(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)){ // Added in_ep_busy. Check later.
+	if (!usb_in_endpoint_halted(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)){ // Added in_ep_busy. Check later.
 		COMMS_USB_progRET_transmitBuf();
 	}
 
@@ -227,7 +181,7 @@ INTERRUPT(USB1Interrupt){
 	////////////////////////////////////////////////////////////
 
 	// Get data from EP4 OUT (USB-UART, PC to us)
-	else if (!usb_out_endpoint_halted(EP_UART_NUM) && usb_out_endpoint_has_data(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM)) {
+	if (!usb_out_endpoint_halted(EP_UART_NUM) && usb_out_endpoint_has_data(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM)) {
 		if (COMMS_uartTX_addToBuf() == 0){
 			usb_arm_out_endpoint(EP_UART_NUM);
 		}
