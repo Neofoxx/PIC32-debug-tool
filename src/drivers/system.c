@@ -566,18 +566,15 @@ void MIPS32 INTEnableSystemMultiVectoredInt(void)
     uint32_t val;
 
     // set the CP0 cause IV bit high
-    //asm volatile("mfc0   %0,$13" : "=r"(val));
-    val = _CP0_GET_CAUSE();
+    asm volatile("mfc0   %0,$13" : "=r"(val));
     val |= 0x00800000;
-    //asm volatile("mtc0   %0,$13" : "+r"(val));
-    _CP0_SET_CAUSE(val);
+    asm volatile("mtc0   %0,$13" : "+r"(val));
 
     INTCONSET = _INTCON_MVEC_MASK;
 
     // set the CP0 status IE bit high to turn on interrupts
     //INTEnableInterrupts();
 	asm("ei");
-
 }
 
 

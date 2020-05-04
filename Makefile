@@ -11,10 +11,9 @@
 TARGET = main
 MCU = 32MX440F256H
 #MCU = 32MX270F256D
-OPTIMIZATION = -O2
+OPTIMIZATION = -O1
 CRYSTALFREQUENCY = 8000000L
 MIN_HEAP_SIZE = _min_heap_size=2048
-MIN_STACK_SIZE = _min_stack_size=2048
 
 # Provide your source directories
 BUILD_DIR = build
@@ -72,8 +71,8 @@ vpath %.s $(sort $(dir $(ASM_SOURCES)))
 
 
 CFLAGS = $(ARCH) -nostdlib $(OPTIMIZATION) -D $(FAMILY) -D $(MCU_XC) -D USB_USE_INTERRUPTS\
- -Wl,-defsym,$(MIN_HEAP_SIZE) -Wl,-defsym,$(MIN_STACK_SIZE) -Wl,-Map=$(BUILD_DIR)/output.map\
--Wall -ffunction-sections -fdata-sections -Wl,--gc-section -fdollars-in-identifiers #-Werror \
+ -Wl,-defsym,$(MIN_HEAP_SIZE) -Wl,-Map=$(BUILD_DIR)/output.map\
+-Wall -ffunction-sections -fdata-sections -Wl,--gc-section -fdollars-in-identifiers #-Werror 
 #
 
 all: $(TARGET).hex

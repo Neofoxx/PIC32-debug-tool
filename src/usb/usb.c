@@ -268,7 +268,19 @@ struct ep_buf {
 	uint8_t flags;
 };
 
+struct ep0_buf {
+	unsigned char * const out; /* buffers for the even buffer descriptor */
+	unsigned char * const in;  /* ie: ppbi = 0 */
+#ifdef PPB_EP0_OUT
+	unsigned char * const out1; /* buffer for the odd buffer descriptor */
+#endif
+#ifdef PPB_EP0_IN
+	unsigned char * const in1;  /* buffer for the odd buffer descriptor */
+#endif
 
+	/* Use the EP_* flags from ep_buf for flags */
+	uint8_t flags;
+};
 
 #if defined(PPB_EP0_IN) && defined(PPB_EP0_OUT)
 	#define EP_BUFS0() { ep_buffers.ep_0_out_buf[0], \
@@ -304,7 +316,7 @@ struct ep_buf {
 	                     EP_##n##_IN_LEN },
 #endif
 
-struct ep0_buf ep0_buf = EP_BUFS0();
+static struct ep0_buf ep0_buf = EP_BUFS0();
 
 static struct ep_buf ep_buf[NUM_ENDPOINT_NUMBERS+1] = {
 #if NUM_ENDPOINT_NUMBERS >= 0
@@ -362,19 +374,19 @@ static struct ep_buf ep_buf[NUM_ENDPOINT_NUMBERS+1] = {
 #undef EP_BUFS0
 
 /* Global data */
-bool addr_pending;
-uint32_t addr;
-uint32_t g_configuration;
-bool control_need_zlp;
-bool returning_short;
+static bool addr_pending;
+static uint8_t addr;
+static uint8_t g_configuration;
+static bool control_need_zlp;
+static bool returning_short;
 
 /* Data associated with multi-packet control transfers */
-usb_ep0_data_stage_callback ep0_data_stage_callback;
-char   *ep0_data_stage_in_buffer; /* XC8 v1.12 fails if this is const on PIC16 */
-char   *ep0_data_stage_out_buffer;
-size_t  ep0_data_stage_buf_remaining;
-void   *ep0_data_stage_context;
-uint8_t ep0_data_stage_direc; /*1=IN, 0=OUT, Same as USB spec.*/
+static usb_ep0_data_stage_callback ep0_data_stage_callback;
+static char   *ep0_data_stage_in_buffer; /* XC8 v1.12 fails if this is const on PIC16 */
+static char   *ep0_data_stage_out_buffer;
+static size_t  ep0_data_stage_buf_remaining;
+static void   *ep0_data_stage_context;
+static uint8_t ep0_data_stage_direc; /*1=IN, 0=OUT, Same as USB spec.*/
 
 static void reset_ep0_data_stage()
 {
@@ -539,7 +551,7 @@ void usb_init(void)
 	// TODO
 	// So this goes, and sets _16_ registers to 0. From U1EP0 to U1EP15
 	//memset(SFR_EP_MGMT(0), 0x0, sizeof(*SFR_EP_MGMT(0)) * 16);
-	// Reverted to manually doing them all, when debugging why it didn't work. TODO change back.
+	// Reverted to manually doing them all, when debugging why i didn't work. TODO change back.
 
 	U1EP0 = 0;
 	U1EP1 = 0;
@@ -595,7 +607,7 @@ void usb_init(void)
 	SFR_USB_IE = 1;     /* USB Interrupt enable */
 #endif
 	
-	//UIRbits.URSTIF = 0; /* Clear USB Reset on Start */ // Original code does this already...
+	//UIRbits.URSTIF = 0; /* Clear USB Reset on Start */
 }
 
 static void reset_bd0_out(void)
@@ -1306,16 +1318,6 @@ static inline void handle_ep0_in()
    and service USB requests */
 void usb_service(void)
 {
-	volatile uint32_t wtf;
-	volatile uint32_t wtfTwo;
-
-	if (ep0_buf.in == 0){
-//		for(;;){
-			asm("nop");
-			wtf = SFR_USB_INTERRUPT_FLAGS;
-			asm("nop");
-//		}
-	}
 	if (SFR_USB_RESET_IF) {
 		/* A Reset was detected on the wire. Re-init the SIE. */
 #ifdef USB_RESET_CALLBACK

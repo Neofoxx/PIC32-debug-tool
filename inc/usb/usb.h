@@ -42,26 +42,6 @@
 
 #include "usb_config.h"
 
-#define PPB_EP0_OUT
-#define PPB_EP0_IN
-#define PPB_EPn
-
-struct ep0_buf {
-	unsigned char * const out; /* buffers for the even buffer descriptor */
-	unsigned char * const in;  /* ie: ppbi = 0 */
-#ifdef PPB_EP0_OUT
-	unsigned char * const out1; /* buffer for the odd buffer descriptor */
-#endif
-#ifdef PPB_EP0_IN
-	unsigned char * const in1;  /* buffer for the odd buffer descriptor */
-#endif
-
-	/* Use the EP_* flags from ep_buf for flags */
-	uint8_t flags;
-};
-
-extern struct ep0_buf ep0_buf;	// DEBUGGING
-
 /* setup_packet is defined in usb_ch9.h */
 struct setup_packet;
 

@@ -26,22 +26,15 @@
 // Interrupts
 #include <interrupt.h>
 
-//#undef USB_USE_INTERRUPTS
 
 
 volatile char tempArray[128];
 volatile uint8_t lengthArray = 0;
 
-volatile uint32_t packetCounter = 0;
-volatile uint32_t numTransmissions = 1;
-volatile uint8_t temp[8] = {0xFF, 0xFE, 0x00, 0x00, 0x00, 0x00, 0xEE, 0xED};
-
 
 #ifdef MULTI_CLASS_DEVICE
 static uint8_t cdc_interfaces[] = { 0, 2 };	// Interfaces 0 and 2. Each begins at the IAD, and then goes on for 2 interfaces (0 and 1, 2 and 3).
 #endif
-
-void handleUSB();
 
 // TODO - run the timer, like in MX440 example (SysTick style)
 void simpleDelay(unsigned int noOfLoops){
@@ -63,21 +56,13 @@ void setup(){
 
 	// DO NOT setup KSEG0 (cacheable area) on MX1/MX2, debugging will NOT work
 
-	// To setup KSEG0 (cacheable are), do this:
-	/*
-	unsigned int val;
-	val = _CP0_GET_CONFIG();	// Macro present in cp0defs.h
-	val |= 0x00000003;	// Sets to KSEG0/cachable region, as per Table 2-11 in ref. manual
-	_mtc0(_CP0_CONFIG, _CP0_CONFIG_SELECT, val);	// No macro, do it as suggested in first link.
-	*/
-
 	BMXCONbits.BMXWSDRM = 0;	// Set wait-states to 0
 	
 	// System config, call with desired CPU freq. and PBCLK divisor
 #if defined (__32MX270F256D__)
 	SystemConfig(48000000L, 1);	// Set to 48MHz, with PBCLK with divider 1 (same settings as DEVCFG)
 #elif defined(__32MX440F256H__)
-	SystemConfig(80000000L, 1);	// Set to 80MHz CPU & 80MHz for peripherals.
+	SystemConfig(80000000L, 1);	// Set to 80MHz
 #endif
 
 	GPIODrv_init();
@@ -88,7 +73,8 @@ void setup(){
 	// Enable DMA. This was enabled during testing USB, TODO check.
 	DMACONbits.ON = 1;
 
-
+	// Enable interrupts
+	INTEnableSystemMultiVectoredInt();
 
 	// Copied for USB, from hardware.c
 	// TODO, make generic, make proper.
@@ -98,64 +84,32 @@ void setup(){
 	IPC11bits.USBIP = 4;
 #endif
 
+#ifdef USB_USE_INTERRUPTS
+//	IEC1bits.USBIE = 1;
+#endif
+
+}
 
 
-	IPC11bits.USBIP = 6;	// Highest priority
-	IPC11bits.USBIS = 3;	// Highest subpriority
-	// Must be done before interrupts are enabled.
+int main(){
+
+
+	setup();
 	cdc_set_interface_list(cdc_interfaces, 2);
 	usb_init();
 
-	// Enable interrupts
-	INTEnableSystemMultiVectoredInt();
+	// A very basic USB-UART example.
+	// Currently everything is hardcoded. Will be expanded later.
 
-}
+	for(;;){
 
+		// Handle data that is to be sent to the PC
+		// Nothing yet
 
-void usb_deinit(){
-	// Shotgun approach
-	U1CON = 0;
-	U1OTGIR = 0xFFFFFFFF;	// Must write 1 to clear interrupt
-	U1OTGIE = 0;
-	U1OTGCON = 0;
-	U1PWRC = 0;
-	U1IR = 0xFFFFFFFF;		// Must write 1 to clear interrupt
-	U1IE = 0;
-	U1EIR = 0xFFFFFFFF;		// Must write 1 to clear interrupt
-	U1EIE = 0;
-	//U1STAT = 0;	// Read only
-	U1CON = 0;
-	U1ADDR = 0;
-	//U1FRML = 0;	// Read only
-	//U1FRMH = 0;	// Read only
-	U1TOK = 0;		// Might trigger a host transaction (used in host mode)
-	U1SOF = 0;
-	U1BDTP1 = 0;
-	U1BDTP2 = 0;
-	U1BDTP3 = 0;
-	U1CNFG1 = 0;
-	U1EP0 = 0;
-	U1EP1 = 0;
-	U1EP2 = 0;
-	U1EP3 = 0;
-	U1EP4 = 0;
-	U1EP5 = 0;
-	U1EP6 = 0;
-	U1EP7 = 0;
-	U1EP8 = 0;
-	U1EP9 = 0;
-	U1EP10 = 0;
-	U1EP11 = 0;
-	U1EP12 = 0;
-	U1EP13 = 0;
-	U1EP14 = 0;
-	U1EP15 = 0;
-
-
-
-}
-
-uint8_t buf[64] = {	0,1,2,3,4,5,6,7,8,9,
+		//COMMS_handleIncomingProg();
+		// If button is pressed, add data to the uart queue for testing, and delay a bit.
+		if (BTN_getStatus()){
+			uint8_t buf[64] = {	0,1,2,3,4,5,6,7,8,9,
 								0,1,2,3,4,5,6,7,8,9,
 								0,1,2,3,4,5,6,7,8,9,
 								0,1,2,3,4,5,6,7,8,9,
@@ -171,26 +125,6 @@ uint8_t buf[64] = {	0,1,2,3,4,5,6,7,8,9,
 									9,8,7,6,5,4,3,2,1,0,
 									9,8,7,6};
 
-int main(){
-
-
-
-	usb_deinit();
-	setup();
-
-	// A very basic USB-UART example.
-	// Currently everything is hardcoded. Will be expanded later.
-
-	for(;;){
-
-		// Handle data that is to be sent to the PC
-		// Nothing yet
-
-		//COMMS_handleIncomingProg();
-		// If button is pressed, add data to the uart queue for testing, and delay a bit.
-		if (BTN_getStatus() || 1){
-
-
 			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
 			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
 			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
@@ -199,7 +133,6 @@ int main(){
 			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
 			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
 			COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
-
 
 			COMMS_helper_addToBuf(&progRETstruct, bufTwo, 64);
 			COMMS_helper_addToBuf(&progRETstruct, bufTwo, 64);
@@ -221,24 +154,10 @@ int main(){
 			*/
 		}
 
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-
-		if (ep0_buf.in == 0 || ep0_buf.in1 == 0 || numTransmissions == 0){
-			asm("nop");
-		}
-
 
 		#ifndef USB_USE_INTERRUPTS
-		//usb_service();
-		handleUSB();
+		usb_service();
 		#endif
-
 	}
 
     return(0);
@@ -251,22 +170,8 @@ int main(){
 /////////////////////////////////////////////////////////////7
 
 #ifdef USB_USE_INTERRUPTS
-// eic works, but we want vector=xyz.
-// Ok, but, ... Documentation says keep_interrupts_masked ==
-// Keep interrupts masked for the whole function.
-// Without this attribute, GCC tries to reenable interrupts for as much of the function as it can.
-// Which makes sense why we were cycling in the ISR. B
-//INTERRUPT(USB1Interrupt, interrupt("vector=hw3"), keep_interrupts_masked){
-//INTERRUPT(USB1Interrupt, interrupt("vector=hw5")){	// This one fails, keeps calling itself
-INTERRUPT(USB1Interrupt){	// No parameter == eic mode.
-	COMMS_helper_addToBuf(&uartRXstruct, buf, 64);
-
-
-	COMMS_helper_addToBuf(&progRETstruct, bufTwo, 64);
+INTERRUPT(USB1Interrupt){
 	usb_service();
-	if (ep0_buf.in == 0 || ep0_buf.in1 == 0 || numTransmissions == 0){
-		asm("nop");
-	}
 	LED_USBINT_toggle();
 	//COMMS_addToInputBuffer();
 
@@ -274,13 +179,6 @@ INTERRUPT(USB1Interrupt){	// No parameter == eic mode.
 	if (!usb_is_configured()){
 		return;
 	}
-
-	if (packetCounter >=15 ){
-		// Limit how many packets to do/send in one frame. 19 is max, but we need some more for error checking.
-		return;
-	}
-	packetCounter++;
-	numTransmissions++;
 
 	// Priorities!
 
@@ -300,21 +198,15 @@ INTERRUPT(USB1Interrupt){	// No parameter == eic mode.
 
 	// Post data to EP4 IN (USB-UART, us to PC)
 	// This gets posted if >=512B in buffer, or >=x ms passed.
-	if (!usb_in_endpoint_halted(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM)){ // Added in_ep_busy. Check later.
-		/*
-			&& (
-					(COMMS_helper_dataLen(&uartRXstruct) >= 512)
-				|| ((COMMS_helper_timeSinceSent(&uartRXstruct) > 10) && (COMMS_helper_dataLen(&uartRXstruct) > 0))
-				|| uartRXstruct.sizeLastSent == EP_UART_NUM_LEN
-				) ){
-				*/
+	if (!usb_in_endpoint_halted(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM) // Added in_ep_busy. Check later.
+			&& ((COMMS_helper_dataLen(&uartRXstruct) >= 512) || ((COMMS_helper_timeSinceSent(&uartRXstruct) > 10) &&  (COMMS_helper_dataLen(&uartRXstruct) > 0)) ) ){
 		COMMS_USB_uartRX_transmitBuf();
 	}
-/*
+
 	////////////////////////////////////////////////////////////
 	// 2. Get data from EP2 OUT (programmer, PC to us)
 	////////////////////////////////////////////////////////////
-	if (!usb_out_endpoint_halted(EP_PROG_NUM) && usb_out_endpoint_has_data(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)) {
+	else if (!usb_out_endpoint_halted(EP_PROG_NUM) && usb_out_endpoint_has_data(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)) {
 		if (COMMS_progOUT_addToBuf() == 0){
 			usb_arm_out_endpoint(EP_PROG_NUM);
 		}
@@ -325,13 +217,8 @@ INTERRUPT(USB1Interrupt){	// No parameter == eic mode.
 	////////////////////////////////////////////////////////////
 
 	// Post data to EP2 IN (programmer, us to PC)
-	if (!usb_in_endpoint_halted(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)){ // Added in_ep_busy. Check later.
-		if (packetCounter == 6){
-			COMMS_USB_progRET_transmitBuf(1);
-		}
-		else{
-			COMMS_USB_progRET_transmitBuf(0);
-		}
+	else if (!usb_in_endpoint_halted(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)){ // Added in_ep_busy. Check later.
+		COMMS_USB_progRET_transmitBuf();
 	}
 
 
@@ -340,110 +227,13 @@ INTERRUPT(USB1Interrupt){	// No parameter == eic mode.
 	////////////////////////////////////////////////////////////
 
 	// Get data from EP4 OUT (USB-UART, PC to us)
-	if (!usb_out_endpoint_halted(EP_UART_NUM) && usb_out_endpoint_has_data(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM)) {
+	else if (!usb_out_endpoint_halted(EP_UART_NUM) && usb_out_endpoint_has_data(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM)) {
 		if (COMMS_uartTX_addToBuf() == 0){
 			usb_arm_out_endpoint(EP_UART_NUM);
 		}
 	}
 
-	if (ep0_buf.in == 0 || ep0_buf.in1 == 0){
-		asm("nop");
-	}
-
-*/
 }
-#else
-void handleUSB(){
-		if (ep0_buf.in == 0 || ep0_buf.in1 == 0 || numTransmissions == 0){
-			asm("nop");
-		}
-		usb_service();
-		if (ep0_buf.in == 0 || ep0_buf.in1 == 0 || numTransmissions == 0){
-			asm("nop");
-		}
-		LED_USBINT_toggle();
-		//COMMS_addToInputBuffer();
-
-		// All of the cases depend on this anyway.
-		if (!usb_is_configured()){
-			return;
-		}
-
-		if (packetCounter >=6 ){
-			// Limit how many packets to do/send in one frame. 19 is max, but we need some more for error checking.
-			return;
-		}
-		packetCounter++;
-		numTransmissions++;
-
-		// Priorities!
-
-		// 1. We have one IN (us->PC) endpoint for USB-UART. This one must have high throughput, but can have bigger latency
-		// 4. The OUT (PC->us) endpoint for USB-UART has got the short straw, when it happens it happens.
-
-		// 3. We have one IN (us->PC) endpoint for the programmer - low-ish throughput, medium latency?
-		// 2. We have one OUT (PC->us) endpoint for the programmer - medium throughput, low latency desired
-
-		// So, uh, we can send MORE than 64B in one 1ms time slot.
-		// The trick is to limit the number of packets to <19, or something like that.
-		// Let's limit it to 8 packets (8*64 = 512B), which should be quite a lot.
-
-		////////////////////////////////////////////////////////////
-		// 1. Push data to EP4 IN (UART, us to PC)
-		////////////////////////////////////////////////////////////
-
-		// Post data to EP4 IN (USB-UART, us to PC)
-		// This gets posted if >=512B in buffer, or >=x ms passed.
-		if (!usb_in_endpoint_halted(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM) // Added in_ep_busy. Check later.
-				&& (
-						(COMMS_helper_dataLen(&uartRXstruct) >= 512)
-					|| ((COMMS_helper_timeSinceSent(&uartRXstruct) > 10) && (COMMS_helper_dataLen(&uartRXstruct) > 0))
-					|| uartRXstruct.sizeLastSent == EP_UART_NUM_LEN
-					) ){
-			COMMS_USB_uartRX_transmitBuf();
-		}
-
-		////////////////////////////////////////////////////////////
-		// 2. Get data from EP2 OUT (programmer, PC to us)
-		////////////////////////////////////////////////////////////
-		if (!usb_out_endpoint_halted(EP_PROG_NUM) && usb_out_endpoint_has_data(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)) {
-			if (COMMS_progOUT_addToBuf() == 0){
-				usb_arm_out_endpoint(EP_PROG_NUM);
-			}
-		}
-
-		////////////////////////////////////////////////////////////
-		// 3. Push data to EP2 IN (programmer, us to PC)
-		////////////////////////////////////////////////////////////
-
-		// Post data to EP2 IN (programmer, us to PC)
-		if (!usb_in_endpoint_halted(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)){ // Added in_ep_busy. Check later.
-			if (packetCounter == 6){
-				COMMS_USB_progRET_transmitBuf(1);
-			}
-			else{
-				COMMS_USB_progRET_transmitBuf(0);
-			}
-		}
-
-
-		////////////////////////////////////////////////////////////
-		// 4. Get data from EP4 OUT (UART, PC to us)
-		////////////////////////////////////////////////////////////
-
-		// Get data from EP4 OUT (USB-UART, PC to us)
-		if (!usb_out_endpoint_halted(EP_UART_NUM) && usb_out_endpoint_has_data(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM)) {
-			if (COMMS_uartTX_addToBuf() == 0){
-				usb_arm_out_endpoint(EP_UART_NUM);
-			}
-		}
-
-		if (ep0_buf.in == 0 || ep0_buf.in1 == 0){
-			asm("nop");
-		}
-
-}
-
 #endif
 
 
@@ -504,12 +294,12 @@ int16_t app_unknown_get_descriptor_callback(const struct setup_packet *pkt, cons
 
 void app_start_of_frame_callback(void)
 {
-	packetCounter = 0;	// hack, but it has to be somewhere.
+
 }
 
 void app_usb_reset_callback(void)
 {
-	asm("nop");
+
 }
 
 /* CDC Callbacks. See usb_cdc.h for documentation. */
