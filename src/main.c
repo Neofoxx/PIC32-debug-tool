@@ -73,9 +73,6 @@ void setup(){
 	// Enable DMA. This was enabled during testing USB, TODO check.
 	DMACONbits.ON = 1;
 
-	// Enable interrupts
-	INTEnableSystemMultiVectoredInt();
-
 	// Copied for USB, from hardware.c
 	// TODO, make generic, make proper.
 #if defined (__32MX270F256D__)
@@ -84,9 +81,8 @@ void setup(){
 	IPC11bits.USBIP = 4;
 #endif
 
-#ifdef USB_USE_INTERRUPTS
-//	IEC1bits.USBIE = 1;
-#endif
+	// Enable interrupts - at the end, otherwise setting priorities is ineffective
+	INTEnableSystemMultiVectoredInt();
 
 }
 
@@ -97,9 +93,6 @@ int main(){
 	setup();
 	cdc_set_interface_list(cdc_interfaces, 2);
 	usb_init();
-
-	// A very basic USB-UART example.
-	// Currently everything is hardcoded. Will be expanded later.
 
 	for(;;){
 
