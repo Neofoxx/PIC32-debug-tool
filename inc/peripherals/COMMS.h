@@ -51,7 +51,7 @@ void COMMS_USB_uartRX_transmitBuf();
 uint32_t COMMS_uartTX_addToBuf();
 void COMMS_uartTX_transmitBuf();
 uint32_t COMMS_progOUT_addToBuf();
-void COMMS_USB_progRET_transmitBuf();
+void COMMS_USB_progRET_transmitBuf(uint32_t forceZero);
 uint32_t COMMS_helper_addToBuf(comStruct* st, uint8_t* data, uint16_t length);
 uint32_t COMMS_helper_dataLen(comStruct* st);
 uint32_t COMMS_helper_timeSinceSent(comStruct* st);

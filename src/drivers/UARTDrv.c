@@ -26,9 +26,18 @@ INTERRUPT(UART1Interrupt){
 	else{
 		// If we have space, save into buffer
 		receiveArray[head++] = UART_RX_reg;
+
 	}
 
 	LED_toggle();
+	while(1){
+		LED_toggle();
+		uint32_t startTime = _CP0_GET_COUNT();
+
+		while (((uint32_t)_CP0_GET_COUNT() - startTime)/40000 < 500){
+			asm("nop");	// Delay for 5000ms
+		}
+	}
 
 	UART_INT_IFS_bits.UART_INT_IFS_RXIF = 0;
 }
@@ -79,7 +88,7 @@ void UARTDrv_Init(uint32_t baud){
 	UART_BRG_reg = (GetPeripheralClock() / (U2MODEbits.BRGH ? 4 : 16)) / baud - 1;
 
 	// Setup interrupt - Split into new function fer easier ifdef-ing?
-	UART_INT_IPC_bits.UART_INT_IPC_PRIORITY		= 1;	// Priority = 1
+	UART_INT_IPC_bits.UART_INT_IPC_PRIORITY		= 7;	// Priority = 1
 	UART_INT_IPC_bits.UART_INT_IPC_SUBPRIORITY 	= 0;	// Subpriority = 0;
 	UART_INT_IEC_bits.UART_INT_IEC_RXIE			= 1;	// Enable interrupt.
 
