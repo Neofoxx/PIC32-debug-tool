@@ -45,7 +45,7 @@ ARCH = -march=m4k -EL -msoft-float
 LDSCRIPT_USED = elf32pic32mx.ld
 endif
 
-PIC32PROG_PATH = /opt/pic32/pic32prog_GIT/updated_current/pic32prog
+PIC32PROG_PATH = /opt/pic32/pic32prog_GIT/orig_updated_current/pic32prog
 
 
 
@@ -58,7 +58,7 @@ LDFLAGS =  $(STARTUPSCRIPTS) $(INTERRUPTSCRIPT) $(LDSCRIPTS) -Wl,-undefined,dyna
 
 INCLUDES = -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/system -I$(INCLUDE_DIR)/drivers -I$(INCLUDE_DIR)/peripherals \
 -I$(INCLUDE_DIR)/usb -I$(P32M_TOOLCHAIN_PATH)/include -I $(P32M_TOOLCHAIN_PATH)/include/support/interrupt \
--I$(INCLUDE_DIR)/prog_interface
+-I$(INCLUDE_DIR)/prog_interface -I$(P32M_TOOLCHAIN_PATH)/include/sys
 C_SOURCES = $(foreach dir, $(C_SRC_DIR), $(wildcard $(dir)/*.c)) 
 ASM_SOURCES = $(foreach dir, $(ASM_DIR), $(wildcard $(dir)/*.s)) 
 MCU_ASM = $(P32M_TOOLCHAIN_PATH)/proc/$(MCU)/$(MCU_ASM_FILE) # TODO BETTER

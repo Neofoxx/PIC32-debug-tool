@@ -25,7 +25,7 @@ typedef struct comStruct{
 	uint16_t head;
 	uint16_t tail;
 	uint32_t timeStamp;
-	// Add size of last sent?
+	uint32_t sizeofLastSent;
 } comStruct;
 
 extern comStruct uartRXstruct;	// Target to PC
@@ -47,11 +47,11 @@ uint64_t COMMS_pic32XferData(uint32_t nBits, uint32_t data, uint32_t readFlag);
 */
 
 // Newer functions
-void COMMS_USB_uartRX_transmitBuf();
+uint32_t COMMS_USB_uartRX_transmitBuf();
 uint32_t COMMS_uartTX_addToBuf();
 void COMMS_uartTX_transmitBuf();
 uint32_t COMMS_progOUT_addToBuf();
-void COMMS_USB_progRET_transmitBuf();
+uint32_t COMMS_USB_progRET_transmitBuf();
 uint32_t COMMS_helper_addToBuf(comStruct* st, uint8_t* data, uint16_t length);
 uint32_t COMMS_helper_dataLen(comStruct* st);
 uint32_t COMMS_helper_timeSinceSent(comStruct* st);

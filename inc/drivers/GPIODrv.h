@@ -142,6 +142,8 @@
 #define UART_INT_IEC_RXIE			U1RXIE
 #define UART_INT_IFS_bits			IFS0bits
 #define UART_INT_IFS_RXIF			U1RXIF
+#define UART_INT_IFS_TXIF			U1TXIF
+
 
 // Pin definitions for programming
 // TMS bit on RE0

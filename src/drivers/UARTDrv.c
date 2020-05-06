@@ -5,12 +5,18 @@
 #include <inttypes.h>
 #include <interrupt.h>
 #include <LED.h>
+#include <COMMS.h>
+#include <kmem.h>
 
-// Circular buffer for receiving elements
-volatile uint8_t head = 0;
-volatile uint8_t tail = 0;
-volatile uint8_t receiveArray[256];
-uint8_t temp;
+
+uint32_t sizeToSendTx = 0;	// Size to increment the circular buffer after transfer is done
+#if defined (__32MX440F256H__)
+#define DMA_MAX_SIZE 256
+#else
+_Static_assert(0, "Please add the proper define for DMA");
+#endif
+
+
 
 #if defined(__32MX270F256D__)
 INTERRUPT(UART2Interrupt){
@@ -18,21 +24,55 @@ INTERRUPT(UART2Interrupt){
 INTERRUPT(UART1Interrupt){
 #endif
 
-	// Should check if TX or RX interrupt
-	if ((uint8_t)(head+1) == tail){
-		// Buffer full
-		temp = UART_RX_reg;	// Readout data, otherwise we'll be stuck here
-	}
-	else{
-		// If we have space, save into buffer
-		receiveArray[head++] = UART_RX_reg;
-	}
+	// Just an RX interrupt here.
+	// This is fine for slower speeds like 115200.
 
-	LED_toggle();
+	// Get data and save to buffer
+	uint8_t temp = UART_RX_reg;
+	COMMS_helper_addToBuf(&uartRXstruct, &temp, 1);
 
+	// Clear RX interrupt
 	UART_INT_IFS_bits.UART_INT_IFS_RXIF = 0;
 }
 
+// DMA 0 for TX-ing, DMA1 for RXint (when added)
+INTERRUPT(DMA0Interrupt){
+
+	// Currently, when finished, just update the buffer position
+	// and clear interrupt flag
+	uartTXstruct.tail = (uartTXstruct.tail + sizeToSendTx) & cyclicBufferSizeMask;
+
+	DCH0INTCLR = _DCH0INT_CHBCIF_MASK;	// Clear the DMA channel interrupt flag (Block Transfer Done)
+	IFS1bits.DMA0IF = 0;				// Clear the DMA0 interrup flag ><
+
+}
+
+
+void UARTDrv_InitDMA(){
+	// Setup parts of DMA, like priorities etc.
+
+	DCH0INTbits.CHBCIE = 1;	// Enable Block Transfer Done
+
+#if defined(__32MX440F256H__)
+	IPC9bits.DMA0IP = 5;	// Priority 5 (higher than USB, so we update the size at the right time)
+	IPC9bits.DMA0IS = 0;	// Subpriority 0
+#else
+	_Static_assert(0, "Not implemented yet.");
+#endif
+
+	//DCH0CON = 0;				// Clear everything.
+	DCH0CONCLR = 0xFFFFFFFF;
+	// No CHBUSY bit, so can't check for end of transaction.
+	//DCH0CONbits.CHPRI = 0x03;	// Higher priority
+	//DCH0CONbits.CHAEN = 0;		// Auto Disable on block transfer
+	//DCH0CONbits.CHCHN = 0;		// No chaining
+	DCH0CONSET = 0x3 << _DCH0CON_CHPRI_POSITION;
+
+	//IEC1bits.DMA0IE = 1;		// Enable DMA0 interrupt
+	IEC1SET = _IEC1_DMA0IE_MASK;
+
+	// DMACON gets enabled at the end of setup in main.
+}
 
 void UARTDrv_Init(uint32_t baud){
 	UART_MODE_bits.ON = 0;
@@ -66,7 +106,7 @@ void UARTDrv_Init(uint32_t baud){
 
 	UART_STA_bits.ADM_EN = 0;	// Don't care for auto address detection, unused
 	UART_STA_bits.ADDR = 0;		// Don't care for auto address mark
-	UART_STA_bits.UTXISEL = 00;	// Generate interrupt, when at least one space available (unused)
+	UART_STA_bits.UTXISEL = 0b10;	//TODO
 	UART_STA_bits.UTXINV = 0;	// Idle HIGH
 	UART_STA_bits.URXEN = 1;	// UART receiver pin enabled
 	UART_STA_bits.UTXBRK = 0;	// Don't send breaks.
@@ -79,15 +119,18 @@ void UARTDrv_Init(uint32_t baud){
 	UART_BRG_reg = (GetPeripheralClock() / (U2MODEbits.BRGH ? 4 : 16)) / baud - 1;
 
 	// Setup interrupt - Split into new function fer easier ifdef-ing?
-	UART_INT_IPC_bits.UART_INT_IPC_PRIORITY		= 1;	// Priority = 1
+	UART_INT_IPC_bits.UART_INT_IPC_PRIORITY		= 6;	// Priority = 6, highest, above USB.
+														// Once receiving is put into DMA, it can be lower.
 	UART_INT_IPC_bits.UART_INT_IPC_SUBPRIORITY 	= 0;	// Subpriority = 0;
 	UART_INT_IEC_bits.UART_INT_IEC_RXIE			= 1;	// Enable interrupt.
+
+	UARTDrv_InitDMA();	// Perform initializations of DMA.
 
 	UART_MODE_bits.ON = 1;
 }
 
 void UARTDrv_SendBlocking(uint8_t * buffer, uint32_t length){
-
+	// TODO remove.
 	uint32_t counter = 0;
 
 	for (counter = 0; counter<length; counter++){
@@ -95,45 +138,64 @@ void UARTDrv_SendBlocking(uint8_t * buffer, uint32_t length){
 		UART_TX_reg = buffer[counter];
 		asm("nop");
 	}
-
-	// Wait until sent
-	// Fucking errata.
-	/*
-	while(UART_STA_bits.TRMT){
-		_nop();
-		asm("nop");
-	}
-	*/
 }
 
-uint32_t UARTDrv_GetCount(){
-	uint32_t tempHead = head;
-	uint32_t tempTail = tail;
-	if (tempHead == tempTail){
-		return 0;
-	}
-	else if (tempHead > tempTail){
-		return (tempHead-tempTail);
-	}
-	else{
-		return (sizeof(receiveArray) - tempTail + tempHead);
-	}
 
+
+// Can expand for modularity, if multiple DMAs
+uint32_t UARTDrv_IsTxDmaRunning(){
+	return (DCH0CONbits.CHEN);	// Don't have a CHBUSY bit. Check if DMA disabled.
 }
 
-uint32_t UARTDrv_GetReceiveData(uint8_t *copyTo, uint8_t maxSize){
-	// Copy a max of maxSize into copyTo array.
-	// Return number of Bytes received from the array
-	uint8_t tempHead = head;
-	uint8_t tempTail = tail;
-	uint8_t counter = 0;
-	for (counter = 0; counter<maxSize && tempTail != tempHead; ){
-		copyTo[counter] = receiveArray[tempTail];
+void UARTDrv_RunDmaTx(){
+	// So, here's the thing. For small transfers DMA is going to have a bit of overhead.
+	// Also, if we start near the end of the buffer, there will be some performance penalty. Oh well.
 
-		counter++;
-		tempTail++;	// Relying on uint8_t overflow
+	// Which struct
+	comStruct* whichStruct = &uartTXstruct;
+
+	// Get size to send
+	sizeToSendTx = COMMS_helper_dataLen(whichStruct);
+
+	// Take care of end of buffer edge case. TODO DOUBLE CHECK >=
+	if ((whichStruct->tail + sizeToSendTx) > cyclicBufferSizeMask){
+		sizeToSendTx = cyclicBufferSizeMask - whichStruct->tail + 1;
 	}
-	tail = tempTail;
-	return counter;
-}
 
+	// TODO, save this differently, and update in DMA via DCH0CPTR or whichever.
+	if (sizeToSendTx > DMA_MAX_SIZE){
+		sizeToSendTx = DMA_MAX_SIZE;	// FUCKING BLANKET DATASHEETS AND SPECIFIC "some bits are not available on all devices" BULLSHIT.
+	}
+
+	UART_INT_IFS_bits.UART_INT_IFS_TXIF = 0;	// Clear TX done of last transfer.
+
+	//DCH0CONbits.CHAEN = 0;						// Disable channel
+	DCH0CONCLR = _DCH0CON_CHAEN_MASK;
+	asm("nop");
+
+
+	//DCH0ECON = 0;
+	DCH0ECONCLR = 0xFFFFFFFF;
+	asm("nop");
+	//DCH0ECONbits.CHSIRQ = _UART1_TX_IRQ;		// Which interrupts enable the transfer. Interrupts from 0 to 255. U1TX = 28 on 440F
+	DCH0ECONSET = (_UART1_TX_IRQ << _DCH0ECON_CHSIRQ_POSITION) | _DCH0ECON_SIRQEN_MASK;	// Run on irq set by CHSIRQ
+	asm("nop");
+
+
+	DCH0SSA = KVA_TO_PA(&(whichStruct->data[whichStruct->tail]));	// Source address
+	DCH0DSA = KVA_TO_PA(&U1TXREG);									// Destination address
+	DCH0SSIZ = (sizeToSendTx >= DMA_MAX_SIZE) ? 0 : sizeToSendTx;	// Source is of size sizeToSendTX. 0 == 2^numBits.
+	DCH0DSIZ = 1;													// UART register is 1B large
+	DCH0CSIZ = 1;													// 1B per UART transfer
+
+	DCH0INTCLR = 0x000000FF;										// Clear all interrupt flags
+	// IE flags are already set in DMA_init
+
+
+	//DCH0CONbits.CHEN = 1;		// Enable channel
+	DCH0CONSET = _DCH0CON_CHEN_MASK;
+	asm("nop");
+	//DCH0ECONbits.CFORCE = 1;	// Force start first transfer.
+	DCH0ECONSET = _DCH0ECON_CFORCE_MASK;
+	asm("nop");
+}

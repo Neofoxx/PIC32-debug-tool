@@ -28,13 +28,12 @@
 
 
 
-volatile char tempArray[128];
-volatile uint8_t lengthArray = 0;
-
-
 #ifdef MULTI_CLASS_DEVICE
 static uint8_t cdc_interfaces[] = { 0, 2 };	// Interfaces 0 and 2. Each begins at the IAD, and then goes on for 2 interfaces (0 and 1, 2 and 3).
 #endif
+
+volatile uint32_t packetCounter = 0;	// Reset by SOF. May be useful
+
 
 // TODO - run the timer, like in MX440 example (SysTick style)
 void simpleDelay(unsigned int noOfLoops){
@@ -70,9 +69,6 @@ void setup(){
 	BTN_init();
 	UARTDrv_Init(1000000);
 
-	// Enable DMA. This was enabled during testing USB, TODO check.
-	DMACONbits.ON = 1;
-
 	// Copied for USB, from hardware.c
 	// TODO, make generic, make proper.
 #if defined (__32MX270F256D__)
@@ -80,6 +76,10 @@ void setup(){
 #elif defined(__32MX440F256H__)
 	IPC11bits.USBIP = 4;
 #endif
+
+	// Enable DMA at the end.
+	DMACONbits.ON = 1;
+	asm("nop");
 
 	// Enable interrupts - at the end, otherwise setting priorities is ineffective
 	INTEnableSystemMultiVectoredInt();
@@ -101,10 +101,10 @@ int main(){
 
 		//COMMS_handleIncomingProg();
 
-
 		#ifndef USB_USE_INTERRUPTS
 		usb_service();
 		#endif
+
 	}
 
     return(0);
@@ -138,25 +138,28 @@ INTERRUPT(USB1Interrupt){
 	// So, uh, we can send MORE than 64B in one 1ms time slot.
 	// The trick is to limit the number of packets to <19, or something like that.
 	// Let's limit it to 8 packets (8*64 = 512B), which should be quite a lot.
+	// -> Scratch that, the USB engine will not do stupid things if we send too late in the frame.
+	// Also, let's focus on making this functional, rather then 3Mb/s UARt-> PC fast. 115200 will be plenty, frig it.
+	// After everything is said and done, optimize the UART for faster speeds.
 
 	////////////////////////////////////////////////////////////
 	// 1. Push data to EP4 IN (UART, us to PC)
 	////////////////////////////////////////////////////////////
 
 	// Post data to EP4 IN (USB-UART, us to PC)
-	// This gets posted if >=512B in buffer, or >=x ms passed.
-	if (!usb_in_endpoint_halted(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM) // Added in_ep_busy. Check later.
-			&& ((COMMS_helper_dataLen(&uartRXstruct) >= 512) || (COMMS_helper_timeSinceSent(&uartRXstruct) > 10)) ){
-		COMMS_USB_uartRX_transmitBuf();
+	if (!usb_in_endpoint_halted(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM)){
+		if (!COMMS_USB_uartRX_transmitBuf()){
+			packetCounter++;
+		}
 	}
 
 	////////////////////////////////////////////////////////////
 	// 2. Get data from EP2 OUT (programmer, PC to us)
 	////////////////////////////////////////////////////////////
 	if (!usb_out_endpoint_halted(EP_PROG_NUM) && usb_out_endpoint_has_data(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)) {
-		if (COMMS_progOUT_addToBuf() == 0){
-			usb_arm_out_endpoint(EP_PROG_NUM);
+		if (!COMMS_progOUT_addToBuf()){
 		}
+		packetCounter++; // I think packet is consumed regardless
 	}
 
 	////////////////////////////////////////////////////////////
@@ -164,10 +167,11 @@ INTERRUPT(USB1Interrupt){
 	////////////////////////////////////////////////////////////
 
 	// Post data to EP2 IN (programmer, us to PC)
-	if (!usb_in_endpoint_halted(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)){ // Added in_ep_busy. Check later.
-		COMMS_USB_progRET_transmitBuf();
+	if (!usb_in_endpoint_halted(EP_PROG_NUM) && !usb_in_endpoint_busy(EP_PROG_NUM)){
+		if (!COMMS_USB_progRET_transmitBuf()){
+			packetCounter++;
+		}
 	}
-
 
 	////////////////////////////////////////////////////////////
 	// 4. Get data from EP4 OUT (UART, PC to us)
@@ -175,9 +179,17 @@ INTERRUPT(USB1Interrupt){
 
 	// Get data from EP4 OUT (USB-UART, PC to us)
 	if (!usb_out_endpoint_halted(EP_UART_NUM) && usb_out_endpoint_has_data(EP_UART_NUM) && !usb_in_endpoint_busy(EP_UART_NUM)) {
-		if (COMMS_uartTX_addToBuf() == 0){
-			usb_arm_out_endpoint(EP_UART_NUM);
+		if (!COMMS_uartTX_addToBuf()){
 		}
+		packetCounter++;
+	}
+
+
+	////////////////////
+	// At this point, also check for data in the uartTX buffer, and if the DMA isn't running.
+	if (!UARTDrv_IsTxDmaRunning() && (COMMS_helper_dataLen(&uartTXstruct) > 0) && UART_STA_bits.TRMT){	// TRMT because sometimes.. it's weird.
+		UARTDrv_RunDmaTx();
+		LED_toggle();
 	}
 
 }
@@ -195,33 +207,35 @@ uint16_t app_get_device_status_callback()
 	return 0x0000;
 }
 
-void app_endpoint_halt_callback(uint8_t endpoint, bool halted)
-{
-
+void app_endpoint_halt_callback(uint8_t endpoint, bool halted){
+	// This is a notification only.  There is no way to reject this request.
 }
 
-int8_t app_set_interface_callback(uint8_t interface, uint8_t alt_setting)
-{
+int8_t app_set_interface_callback(uint8_t interface, uint8_t alt_setting){
+	// The callback should return 0 if the new alternate setting can be set or -1 if
+	// it cannot. This callback is completely unnecessary if you only have one
+	// alternate setting (alternate setting zero) for each interface.
 	return 0;
 }
 
-int8_t app_get_interface_callback(uint8_t interface)
-{
+int8_t app_get_interface_callback(uint8_t interface){
+	// The application should return the interface's current alternate setting
 	return 0;
 }
 
-void app_out_transaction_callback(uint8_t endpoint)
-{
-
+void app_out_transaction_callback(uint8_t endpoint){
+	// If we wanted, we can use this function to trigger when the
+	// OUT transaction on the endpoint is finished (PC->us), and read
+	// data out fast that way. Unnecessary for now.
 }
 
-void app_in_transaction_complete_callback(uint8_t endpoint)
-{
-
+void app_in_transaction_complete_callback(uint8_t endpoint){
+	// If we wanted, we can use this function to trigger when the
+	// IN transaction on the endpoint is finished (us->PC), and rearm/send
+	// data fast that way. Unnecessary for now.
 }
 
-int8_t app_unknown_setup_request_callback(const struct setup_packet *setup)
-{
+int8_t app_unknown_setup_request_callback(const struct setup_packet *setup){
 	/* To use the CDC device class, have a handler for unknown setup
 	 * requests and call process_cdc_setup_request() (as shown here),
 	 * which will check if the setup request is CDC-related, and will
@@ -234,33 +248,34 @@ int8_t app_unknown_setup_request_callback(const struct setup_packet *setup)
 	return process_cdc_setup_request(setup);
 }
 
-int16_t app_unknown_get_descriptor_callback(const struct setup_packet *pkt, const void **descriptor)
-{
+int16_t app_unknown_get_descriptor_callback(const struct setup_packet *pkt, const void **descriptor){
+	// Called when a GET_DESCRIPTOR request is received from
+	// the host for a descriptor which is unrecognized by the USB stack.
 	return -1;
 }
 
-void app_start_of_frame_callback(void)
-{
-
+void app_start_of_frame_callback(void){
+	// Interrupt at SOF
+	packetCounter = 0;
 }
 
-void app_usb_reset_callback(void)
-{
-
+void app_usb_reset_callback(void){
+	// Possibly reset USB buffer, or setup DMAs or something.
+	// Unnecessary for now.
 }
 
 /* CDC Callbacks. See usb_cdc.h for documentation. */
 
-int8_t app_send_encapsulated_command(uint8_t interface, uint16_t length)
-{
+int8_t app_send_encapsulated_command(uint8_t interface, uint16_t length){
+	// Unsure what to support here.
 	return -1;
 }
 
 int16_t app_get_encapsulated_response(uint8_t interface,
                                       uint16_t length, const void **report,
                                       usb_ep0_data_stage_callback *callback,
-                                      void **context)
-{
+                                      void **context){
+	// Unsure what to support here.
 	return -1;
 }
 
