@@ -144,6 +144,29 @@
 #define UART_INT_IFS_RXIF			U1RXIF
 #define UART_INT_IFS_TXIF			U1TXIF
 
+// UART RTS and DTR
+// RTS on CON1-8
+#define UART_RTS_TRISbits		TRISEbits
+#define UART_RTS_TRISPIN		TRISE5
+#define UART_RTS_LATbits		LATEbits
+#define UART_RTS_LATPIN			LATE5
+#define UART_RTS_LATINV			LATEINV
+#define UART_RTS_LATSET			LATESET
+#define UART_RTS_LATCLR			LATECLR
+#define UART_RTS_MASK			(1<<5)
+
+// DTR on CON1-9
+#define UART_DTR_TRISbits		TRISEbits
+#define UART_DTR_TRISPIN		TRISE6
+#define UART_DTR_LATbits		LATEbits
+#define UART_DTR_LATPIN			LATE6
+#define UART_DTR_LATINV			LATEINV
+#define UART_DTR_LATSET			LATESET
+#define UART_DTR_LATCLR			LATECLR
+#define UART_DTR_MASK			(1<<6)
+
+
+
 
 // Pin definitions for programming
 // TMS bit on RE0
@@ -240,6 +263,9 @@ uint32_t GPIODrv_getStateTDI();
 uint32_t GPIODrv_getStateTDO();
 uint32_t GPIODrv_getStateMCLR();
 
+// UART things
+void GPIODrv_setRTS(uint32_t state);
+void GPIODrv_setDTR(uint32_t state);
 
 
 #endif

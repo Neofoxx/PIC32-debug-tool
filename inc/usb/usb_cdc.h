@@ -474,7 +474,7 @@ extern int8_t CDC_GET_LINE_CODING_CALLBACK(uint8_t interface,
  *   will cause STALL to be returned to the host.
  */
 extern int8_t CDC_SET_CONTROL_LINE_STATE_CALLBACK(uint8_t interface,
-                                                  bool dtr, bool dts);
+                                                  bool dtr, bool rts);
 #endif
 
 #ifdef CDC_SEND_BREAK_CALLBACK

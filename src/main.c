@@ -333,14 +333,23 @@ int8_t app_set_line_coding_callback(uint8_t interface,
 int8_t app_get_line_coding_callback(uint8_t interface,
                                     struct cdc_line_coding *coding)
 {
-	/* This is where baud rate, data, stop, and parity bits are set. */
+	// Return what sort of line_coding we are using.
 	*coding = line_coding;
 	return 0;
 }
 
 int8_t app_set_control_line_state_callback(uint8_t interface,
-                                           bool dtr, bool dts)
+                                           bool dtr, bool rts)
 {
+	// Set DTR and RTS lines, according to demands.
+	// Only interface 2 (UART) supports this
+	if (interface != 2){
+		return 0;
+	}
+
+	GPIODrv_setDTR(rts?GPIO_HIGH:GPIO_LOW);
+	GPIODrv_setDTR(dtr?GPIO_HIGH:GPIO_LOW);
+
 	return 0;
 }
 
