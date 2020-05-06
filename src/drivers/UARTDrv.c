@@ -7,7 +7,8 @@
 #include <LED.h>
 #include <COMMS.h>
 #include <kmem.h>
-
+#include <usb.h>		// If usb.h isn't present, usb_cdc.h goes ballistic with errors.
+#include <usb_cdc.h>
 
 uint32_t sizeToSendTx = 0;	// Size to increment the circular buffer after transfer is done
 #if defined (__32MX440F256H__)
@@ -74,7 +75,7 @@ void UARTDrv_InitDMA(){
 	// DMACON gets enabled at the end of setup in main.
 }
 
-void UARTDrv_Init(uint32_t baud){
+void UARTDrv_Init(struct cdc_line_coding* coding){
 	UART_MODE_bits.ON = 0;
 
 	UART_TX_TRISbits.UART_TX_TRISPIN = 0;	// 0 == output
@@ -102,7 +103,12 @@ void UARTDrv_Init(uint32_t baud){
 	UART_MODE_bits.RXINV = 0;	// Idle HIGH
 	UART_MODE_bits.BRGH = 0;	// Standard speed mode - 16x baud clock
 	UART_MODE_bits.PDSEL = 0;	// 8 bits, no parity
-	UART_MODE_bits.STSEL = 0;	// 1 stop bit
+	if (coding->bCharFormat == CDC_CHAR_FORMAT_2_STOP_BITS){
+		UART_MODE_bits.STSEL = 1;	// 2 stop bits
+	}
+	else{
+		UART_MODE_bits.STSEL = 0;	// 1 stop bit
+	}
 
 	UART_STA_bits.ADM_EN = 0;	// Don't care for auto address detection, unused
 	UART_STA_bits.ADDR = 0;		// Don't care for auto address mark
@@ -116,7 +122,7 @@ void UARTDrv_Init(uint32_t baud){
 	UART_STA_bits.OERR = 0;		// Clear RX Overrun bit - not important at this point
 
 	// (PBCLK/BRGH?4:16)/BAUD - 1
-	UART_BRG_reg = (GetPeripheralClock() / (U2MODEbits.BRGH ? 4 : 16)) / baud - 1;
+	UART_BRG_reg = (GetPeripheralClock() / (U2MODEbits.BRGH ? 4 : 16)) / coding->dwDTERate - 1;
 
 	// Setup interrupt - Split into new function fer easier ifdef-ing?
 	UART_INT_IPC_bits.UART_INT_IPC_PRIORITY		= 6;	// Priority = 6, highest, above USB.

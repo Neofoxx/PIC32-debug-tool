@@ -32,6 +32,14 @@
 static uint8_t cdc_interfaces[] = { 0, 2 };	// Interfaces 0 and 2. Each begins at the IAD, and then goes on for 2 interfaces (0 and 1, 2 and 3).
 #endif
 
+static struct cdc_line_coding line_coding =
+{
+	115200,
+	CDC_CHAR_FORMAT_1_STOP_BIT,
+	CDC_PARITY_NONE,
+	8,
+};
+
 volatile uint32_t packetCounter = 0;	// Reset by SOF. May be useful
 
 
@@ -67,7 +75,7 @@ void setup(){
 	GPIODrv_init();
 	LED_init();
 	BTN_init();
-	UARTDrv_Init(1000000);
+	UARTDrv_Init(&line_coding);
 
 	// Copied for USB, from hardware.c
 	// TODO, make generic, make proper.
@@ -300,20 +308,26 @@ int8_t app_get_comm_feature_callback(uint8_t interface,
 	return -1;
 }
 
-static struct cdc_line_coding line_coding =
-{
-	115200,
-	CDC_CHAR_FORMAT_1_STOP_BIT,
-	CDC_PARITY_NONE,
-	8,
-};
-
 int8_t app_set_line_coding_callback(uint8_t interface,
                                     const struct cdc_line_coding *coding)
 {
-	// TODO - check which interface, and actually <i>use</i> this. Ditto for some other functions.
-	line_coding = *coding;
-	return 0;
+	// Check if proper interface (should just enable it on the one that's supported...)
+	if (interface != 2){
+		return 0;
+	}
+
+	// Check if values are in ranges we support
+	if (coding->dwDTERate <= 1000000
+			&& (coding->bCharFormat == CDC_CHAR_FORMAT_1_STOP_BIT || coding->bCharFormat == CDC_CHAR_FORMAT_2_STOP_BITS)
+			&& coding->bParityType == CDC_PARITY_NONE
+			&& coding->bDataBits == 8){
+
+		line_coding = *coding;
+	}
+
+	UARTDrv_Init(&line_coding);
+
+	return 0;	// No way to deny. Must return 0, otherwise it will stall.
 }
 
 int8_t app_get_line_coding_callback(uint8_t interface,
