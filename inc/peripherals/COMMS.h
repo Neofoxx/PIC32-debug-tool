@@ -72,6 +72,9 @@ void COMMS_helper_getData(comStruct* st, uint32_t length, uint8_t *buf);
 
 void COMMS_reinitPacketHelper(dataDecoder * st);
 void COMMS_helper_peekData(const uint8_t *inData, uint32_t start, uint32_t length, uint8_t * buf);
-
+void COMMS_addInfoToOutput();		// TODO sort functions in the same order they are in the .c file.
+void COMMS_commandExecutor();
+void COMMS_pic32SendCommand(uint32_t command);
+uint64_t COMMS_pic32XferData(uint32_t nBits, uint32_t data, uint32_t readFlag);
 
 #endif

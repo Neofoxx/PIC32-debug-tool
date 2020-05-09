@@ -9,6 +9,7 @@
 #include <transport.h>
 #include <GPIODrv.h>
 #include <pic32_prog_definitions.h>
+#include <configBits.h>
 
 // This file handles communication
 // - USB-UART will be one type.
@@ -215,7 +216,7 @@ inline void COMMS_helper_getData(comStruct* st, uint32_t length, uint8_t *buf){
 inline void COMMS_helper_peekData(const uint8_t *inData, uint32_t start, uint32_t length, uint8_t * buf){
 	uint32_t counter = 0;
 	for (counter = 0; counter < length; counter++){
-		buf[counter] = inData[(start + counter) & cyclicBufferSizeMask];
+		buf[counter] = inData[(start + counter) & cyclicBufferSizeMask];	// Also takes care of if start is already out of bounds.
 	}
 }
 
@@ -334,7 +335,7 @@ void COMMS_handleIncomingProg(void){
 					COMMS_commandExecutor();
 
 					// Clear structures
-					COMMS_reinitPacketHelper();
+					COMMS_reinitPacketHelper(&packetHelper);
 					break;
 				}
 				else{
@@ -360,26 +361,26 @@ void COMMS_handleIncomingProg(void){
 void COMMS_addInfoToOutput(){
 	// Send information about the device to PC
 	// A long time ago info output got hardcoded to 128B.
-	uint8_t emptyFluff [128 - sizeof(info.name) - sizeof(info.mcu) - sizeof(info.mode) - sizeof(info.revision)]
-	COMMS_helper_addToBuf(progRETstruct, info.name, sizeof(info.name));
-	COMMS_helper_addToBuf(progRETstruct, info.mcu, sizeof(info.mcu));
-	COMMS_helper_addToBuf(progRETstruct, info.mode, sizeof(info.mode));
-	COMMS_helper_addToBuf(progRETstruct, info.revision, sizeof(info.revision));
+	uint8_t emptyFluff [128 - sizeof(info.name) - sizeof(info.mcu) - sizeof(info.mode) - sizeof(info.revision)];
+	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.name, sizeof(info.name));
+	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.mcu, sizeof(info.mcu));
+	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.mode, sizeof(info.mode));
+	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.revision, sizeof(info.revision));
 
 	// Pad to 128 with \0
 	memset(emptyFluff, 0, sizeof(emptyFluff));
-	COMMS_helper_addToBuf(progRETstruct, emptyFluff, sizeof(emptyFluff));
+	COMMS_helper_addToBuf(&progRETstruct, emptyFluff, sizeof(emptyFluff));
 }
 
 // Make different later?
 void COMMS_addDataToOutput_64b(uint64_t data){
 	// Possibly check endianness
-	COMMS_helper_addToBuf(progRETstruct, &data, sizeof(data));
+	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)&data, sizeof(data));
 }
 
 void COMMS_addDataToOutput_32b(uint32_t data){
 	// Possibly check endianness
-	COMMS_helper_addToBuf(progRETstruct, &data, sizeof(data));
+	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)&data, sizeof(data));
 }
 
 void COMMS_commandExecutor(){
@@ -411,27 +412,31 @@ void COMMS_commandExecutor(){
 		}
 		else if (COMMAND_SET_PROG_MODE == dataAtCounter){
 			// The mode is in the next byte.
-			uint8_t
-			transportSetup(tempBuffer[counter+1]);
+			uint8_t tempData[1];
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + counter + 1, 1, tempData);	// +1 ><
+			transportSetup(tempData[0]);
 			counter = counter + 2;
 		}
 		else if (COMMAND_SET_PIN_IO_MODE == dataAtCounter){
 			// First byte is pin
 			// Second byte is mode (input, output /w high, output / low)
-			if (PIN_TMS == tempBuffer[counter+1]){
-				GPIODrv_setupPinTMS(tempBuffer[counter+2]);
+			uint8_t tempData[2];
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + counter + 1, 2, tempData);	// +1 ><
+
+			if (PIN_TMS == tempData[0]){
+				GPIODrv_setupPinTMS(tempData[1]);
 			}
-			else if (PIN_TCK == tempBuffer[counter+1]){
-				GPIODrv_setupPinTCK(tempBuffer[counter+2]);
+			else if (PIN_TCK == tempData[0]){
+				GPIODrv_setupPinTCK(tempData[1]);
 			}
-			else if (PIN_TDI == tempBuffer[counter+1]){
-				GPIODrv_setupPinTDI(tempBuffer[counter+2]);
+			else if (PIN_TDI == tempData[0]){
+				GPIODrv_setupPinTDI(tempData[1]);
 			}
-			else if (PIN_TDO == tempBuffer[counter+1]){
-				GPIODrv_setupPinTDO(tempBuffer[counter+2]);
+			else if (PIN_TDO == tempData[0]){
+				GPIODrv_setupPinTDO(tempData[1]);
 			}
-			else if (PIN_MCLR == tempBuffer[counter+1]){
-				GPIODrv_setupPinMCLR(tempBuffer[counter+2]);
+			else if (PIN_MCLR == tempData[0]){
+				GPIODrv_setupPinMCLR(tempData[1]);
 			}
 
 			counter = counter + 3;
@@ -439,41 +444,45 @@ void COMMS_commandExecutor(){
 		else if (COMMAND_SET_PIN_WRITE == dataAtCounter){
 			// First byte is pin
 			// Second byte is value (high, low).
-			if (PIN_TMS == tempBuffer[counter+1]){
-				GPIODrv_setStateTMS(tempBuffer[counter+2]);
+			uint8_t tempData[2];
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + counter + 1, 2, tempData);	// +1 ><
+
+			if (PIN_TMS == tempData[0]){
+				GPIODrv_setStateTMS(tempData[1]);
 			}
-			else if (PIN_TCK == tempBuffer[counter+1]){
-				GPIODrv_setStateTCK(tempBuffer[counter+2]);
+			else if (PIN_TCK == tempData[0]){
+				GPIODrv_setStateTCK(tempData[1]);
 			}
-			else if (PIN_TDI == tempBuffer[counter+1]){
-				GPIODrv_setStateTDI(tempBuffer[counter+2]);
+			else if (PIN_TDI == tempData[0]){
+				GPIODrv_setStateTDI(tempData[1]);
 			}
-			else if (PIN_TDO == tempBuffer[counter+1]){
-				GPIODrv_setStateTDO(tempBuffer[counter+2]);
+			else if (PIN_TDO == tempData[0]){
+				GPIODrv_setStateTDO(tempData[1]);
 			}
-			else if (PIN_MCLR == tempBuffer[counter+1]){
-				GPIODrv_setStateMCLR(tempBuffer[counter+2]);
+			else if (PIN_MCLR == tempData[0]){
+				GPIODrv_setStateMCLR(tempData[1]);
 			}
 
 			counter = counter + 3;
 		}
 		else if (COMMAND_SET_PIN_READ == dataAtCounter){
 			// First byte is pin
+			uint8_t tempData[1];
 			uint32_t returnVal = 0;
-			uint8_t temp = COMMS_helper_peekData(prog)
-			if (PIN_TMS == tempBuffer[counter+1]){
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + counter + 1, 1, tempData);	// +1 ><
+			if (PIN_TMS == tempData[0]){
 				returnVal = GPIODrv_getStateTMS();
 			}
-			else if (PIN_TCK == tempBuffer[counter+1]){
+			else if (PIN_TCK == tempData[0]){
 				returnVal = GPIODrv_getStateTCK();
 			}
-			else if (PIN_TDI == tempBuffer[counter+1]){
+			else if (PIN_TDI == tempData[0]){
 				returnVal = GPIODrv_getStateTDI();
 			}
-			else if (PIN_TDO == tempBuffer[counter+1]){
+			else if (PIN_TDO == tempData[0]){
 				returnVal = GPIODrv_getStateTDO();
 			}
-			else if (PIN_MCLR == tempBuffer[counter+1]){
+			else if (PIN_MCLR == tempData[0]){
 				returnVal = GPIODrv_getStateMCLR();
 			}
 
@@ -500,25 +509,32 @@ void COMMS_commandExecutor(){
 			volatile uint64_t returnVal = 0;
 
 			// TMS prolog
-			memcpy(&tms_prolog_nbits, &tempBuffer[location], sizeof(tms_prolog_nbits));
+			//memcpy(&tms_prolog_nbits, &tempBuffer[location], sizeof(tms_prolog_nbits));
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + location, sizeof(tms_prolog_nbits), (uint8_t *)&tms_prolog_nbits);
 			location = location + sizeof(tms_prolog_nbits);
-			memcpy(&tms_prolog, &tempBuffer[location], sizeof(tms_prolog));
+			//memcpy(&tms_prolog, &tempBuffer[location], sizeof(tms_prolog));
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + location, sizeof(tms_prolog), (uint8_t *)&tms_prolog);
 			location = location + sizeof(tms_prolog);
 
 			// TDI
-			memcpy(&tdi_nbits, &tempBuffer[location], sizeof(tdi_nbits));
+			//memcpy(&tdi_nbits, &tempBuffer[location], sizeof(tdi_nbits));
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + location, sizeof(tdi_nbits), (uint8_t *)&tdi_nbits);
 			location = location + sizeof(tdi_nbits);
-			memcpy(&tdi, &tempBuffer[location], sizeof(tdi));
+			//memcpy(&tdi, &tempBuffer[location], sizeof(tdi));
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + location, sizeof(tdi), (uint8_t *)&tdi);
 			location = location + sizeof(tdi);
 
 			// TMS epilog
-			memcpy(&tms_epilog_nbits, &tempBuffer[location], sizeof(tms_epilog_nbits));
+			//memcpy(&tms_epilog_nbits, &tempBuffer[location], sizeof(tms_epilog_nbits));
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + location, sizeof(tms_epilog_nbits), (uint8_t *)&tms_epilog_nbits);
 			location = location + sizeof(tms_epilog_nbits);
-			memcpy(&tms_epilog, &tempBuffer[location], sizeof(tms_epilog));
+			//memcpy(&tms_epilog, &tempBuffer[location], sizeof(tms_epilog));
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + location, sizeof(tms_epilog), (uint8_t *)&tms_epilog);
 			location = location + sizeof(tms_epilog);
 
 			// read flag
-			memcpy(&read_flag, &tempBuffer[location], sizeof(read_flag));
+			//memcpy(&read_flag, &tempBuffer[location], sizeof(read_flag));
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + location, sizeof(read_flag), (uint8_t *)&read_flag);
 			location = location + sizeof(read_flag);
 
 			counter = counter + 1;
@@ -542,7 +558,7 @@ void COMMS_commandExecutor(){
 				// Sending shall be done when parsing the packet is done, or when a special command is parsed.
 			}
 		}
-		else if (COMMAND_XFER_INSTRUCTION == tempBuffer[counter]){
+		else if (COMMAND_XFER_INSTRUCTION == dataAtCounter){
 
 			uint32_t maxCounter = 0;
 			uint32_t maxLimit = 40;	// Just a define
@@ -551,7 +567,8 @@ void COMMS_commandExecutor(){
 			uint32_t instruction = 0;
 
 			// instruction is at counter+1
-			memcpy(&instruction, &tempBuffer[counter+1], sizeof(instruction));
+			//memcpy(&instruction, &tempBuffer[counter+1], sizeof(instruction));
+			COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + counter + 1, sizeof(instruction), (uint8_t *)&instruction);
 			counter = counter + 1 + sizeof(instruction);
 
 
@@ -598,10 +615,6 @@ void COMMS_commandExecutor(){
 
 	}
 
-	// At the END, send everything we have in the outgoing buffer.
-	// If there'll be a "send everything you've got right now" command, then _also_ do it then.
-	COMMS_sendStruct(&outgoingData);
-	COMMS_reinitStruct(&outgoingData, 1);
 }
 
 
