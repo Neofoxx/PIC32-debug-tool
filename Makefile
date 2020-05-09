@@ -53,7 +53,7 @@ LDSCRIPTS = -T$(P32M_TOOLCHAIN_PATH)/proc/$(MCU)/procdefs.ld -T$(P32M_TOOLCHAIN_
 STARTUPSCRIPTS = $(P32M_TOOLCHAIN_PATH)/libpic32/startup/crt0.S $(P32M_TOOLCHAIN_PATH)/libpic32/startup/general-exception.S
 INTERRUPTSCRIPT = $(P32M_TOOLCHAIN_PATH)/include/support/interrupt/interrupt.S	# The new isrwrapper/interrupt system
 # Added build dir to LDFLAGS, so xc.h can find processor.o
-LDFLAGS =  $(STARTUPSCRIPTS) $(INTERRUPTSCRIPT) $(LDSCRIPTS) -Wl,-undefined,dynamic_lookup -L build -lc -lm -lgcc 
+LDFLAGS =  $(STARTUPSCRIPTS) $(INTERRUPTSCRIPT) $(LDSCRIPTS) -Wl,-undefined,dynamic_lookup -L build -lc -lm -lgcc $(DEBUG_L)
 
 
 INCLUDES = -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/system -I$(INCLUDE_DIR)/drivers -I$(INCLUDE_DIR)/peripherals \
@@ -73,7 +73,7 @@ vpath %.s $(sort $(dir $(ASM_SOURCES)))
 
 CFLAGS = $(ARCH) -nostdlib $(OPTIMIZATION) -D $(FAMILY) -D $(MCU_XC) -D USB_USE_INTERRUPTS\
  -Wl,-defsym,$(MIN_HEAP_SIZE) -Wl,-defsym,$(MIN_STACK_SIZE) -Wl,-Map=$(BUILD_DIR)/output.map\
--Wall -ffunction-sections -fdata-sections -Wl,--gc-section -fdollars-in-identifiers #-Werror 
+-Wall -ffunction-sections -fdata-sections -Wl,--gc-section -fdollars-in-identifiers $(DEBUG_C) #-Werror 
 #
 
 all: $(TARGET).hex
@@ -90,7 +90,7 @@ flash_icsp:
 # set to -g, so Debug symbols get built, and -D to define DEBUG_BUILD
 # (useful to automate some cases with #ifdef later)
 debug: 
-	$(MAKE) $(MAKEFILE) DEBUG="-g -D DEBUG_BUILD"
+	$(MAKE) $(MAKEFILE) DEBUG_C="-g -D DEBUG_BUILD" DEBUG_L="-Wl,--defsym=_DEBUGGER=1"
 
 clean: 
 	rm -f $(BUILD_DIR)/*.hex
@@ -104,30 +104,30 @@ clean:
 # $@ evaluates to FILE.o 
 $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 	$(info $($@))
-	$(CC) $(CFLAGS) $(DEBUG) $(INCLUDES) -c $< -o $@
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # Same for assembly files
 $(BUILD_DIR)/%.o: %.s | $(BUILD_DIR)
 	$(info $($@))
-	$(CC) $(CFLAGS) $(DEBUG) $(INCLUDES) -c $< -o $@
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # Same for other assembly files, with upprecase letter
 $(BUILD_DIR)/%.o: %.S | $(BUILD_DIR)
 	$(info $($@))
-	$(CC) $(CFLAGS) $(DEBUG) $(INCLUDES) -c $< -o $@
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 
 # Take for example p32mx250f128.s, and compile into processor.o (defines register locations)
 # Input file should be p32mx ... .s (MCU_ASM)
 # $@ evaluates to processor.o
 processor.o:
-	$(CC) $(CFLAGS) $(DEBUG) $(INCLUDES) -c $(MCU_ASM) -o $(BUILD_DIR)/$@
+	$(CC) $(CFLAGS) $(INCLUDES) -c $(MCU_ASM) -o $(BUILD_DIR)/$@
 
 # target : prerequisites
 # Compile .c files into .o, and processor.o (because name changes)
 # Then link
 $(TARGET).elf: $(OBJ) processor.o
-	$(CC) $(CFLAGS) $(DEBUG) $(OBJ) $(BUILD_DIR)/processor.o $(LDFLAGS) $(INCLUDES) -o $(BUILD_DIR)/$@
+	$(CC) $(CFLAGS) $(OBJ) $(BUILD_DIR)/processor.o $(LDFLAGS) $(INCLUDES) -o $(BUILD_DIR)/$@
 
 # Make .elf
 # LINK

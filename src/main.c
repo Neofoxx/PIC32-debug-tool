@@ -109,7 +109,7 @@ int main(){
 		// Handle data that is to be sent to the PC
 		// Nothing yet
 
-		//COMMS_handleIncomingProg();
+		COMMS_handleIncomingProg();
 
 		#ifndef USB_USE_INTERRUPTS
 		usb_service();

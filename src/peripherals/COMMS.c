@@ -269,6 +269,7 @@ void COMMS_handleIncomingProg(void){
 				startPos = (startPos+1) & cyclicBufferSizeMask;
 				break;
 			}
+			startPos = (startPos+1) & cyclicBufferSizeMask;
 		}
 
 		// If successful/parsed, update space position in buffer
@@ -361,11 +362,11 @@ void COMMS_handleIncomingProg(void){
 void COMMS_addInfoToOutput(){
 	// Send information about the device to PC
 	// A long time ago info output got hardcoded to 128B.
-	uint8_t emptyFluff [128 - sizeof(info.name) - sizeof(info.mcu) - sizeof(info.mode) - sizeof(info.revision)];
-	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.name, sizeof(info.name));
-	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.mcu, sizeof(info.mcu));
-	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.mode, sizeof(info.mode));
-	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.revision, sizeof(info.revision));
+	uint8_t emptyFluff [128 - strlen(info.name) - strlen(info.mcu) - strlen(info.mode) - strlen(info.revision)];
+	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.name, strlen(info.name));
+	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.mcu, strlen(info.mcu));
+	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.mode, strlen(info.mode));
+	COMMS_helper_addToBuf(&progRETstruct, (uint8_t *)info.revision, strlen(info.revision));
 
 	// Pad to 128 with \0
 	memset(emptyFluff, 0, sizeof(emptyFluff));
@@ -393,7 +394,7 @@ void COMMS_commandExecutor(){
 	}
 
 	// Start at position 0 in the packet (reset earlier ><).
-	for (counter = 0; counter < (packetHelper.expectedLength); ){
+	for (counter = 0; counter < (packetHelper.expectedLength - 1); ){	// CRC ><
 		uint8_t dataAtCounter;
 		COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + counter, 1, &dataAtCounter);
 		//uint8_t dataAtCounter = progOUTstruct.data[(progOUTstruct.tail + counter) & cyclicBufferSizeMask]; // I have regrets
@@ -555,7 +556,6 @@ void COMMS_commandExecutor(){
 
 			if (read_flag > 0){
 				COMMS_addDataToOutput_64b(returnVal);
-				// Sending shall be done when parsing the packet is done, or when a special command is parsed.
 			}
 		}
 		else if (COMMAND_XFER_INSTRUCTION == dataAtCounter){
@@ -614,6 +614,9 @@ void COMMS_commandExecutor(){
 		}
 
 	}
+
+	// Update where we are...
+	progOUTstruct.tail = stopPos;
 
 }
 

@@ -76,5 +76,6 @@ void COMMS_addInfoToOutput();		// TODO sort functions in the same order they are
 void COMMS_commandExecutor();
 void COMMS_pic32SendCommand(uint32_t command);
 uint64_t COMMS_pic32XferData(uint32_t nBits, uint32_t data, uint32_t readFlag);
+void COMMS_handleIncomingProg(void);
 
 #endif
