@@ -22,11 +22,18 @@
 // at a more leisurely pace.
 // progOUT is our data/commands, that we must execute.
 // progRET are our responses.
+
+// TODO - initialize all to 0, don't trust the compiler.
 comStruct uartRXstruct;	// Target to PC
 comStruct uartTXstruct;	// PC to target
 comStruct progOUTstruct;	// PC to target
 comStruct progRETstruct;	// Us to PC (Return values)
 
+dataDecoder packetHelper;
+
+uint32_t clkDelay = 20;		// Delay for timing things right (not too fast)
+							// Delay is in * 100ns and at 1/2 CLK FREQ!
+							// Remember, there is a delay per edge = 2 per clk
 
 // FUNCTIONS UART
 // Setup UART RX DMA - function in UART Driver - TODO!!
@@ -96,12 +103,7 @@ uint32_t COMMS_uartTX_addToBuf(){
 }
 
 void COMMS_uartTX_transmitBuf(){
-
-	// Either self-call on DMA DONE interrupt,
-	// or call first time/periodically from USB interrupt
-	// -> in that case, check if DMA active and then restart DMA
-	// Possible race condition if DMA starts reactivating, and USB interferes
-	// Don't fuck this up -.-
+	// Wholly implemented in the UARTDrv. Remove later, or intergrate differently.
 }
 
 // FUNCTIONS PROGRAMMER
@@ -198,8 +200,6 @@ inline uint32_t COMMS_helper_spaceLeft(comStruct* st){
 	return (st->tail - st->head - 1) & cyclicBufferSizeMask;
 }
 
-
-
 inline void COMMS_helper_getData(comStruct* st, uint32_t length, uint8_t *buf){
 	if (COMMS_helper_dataLen(st) < length){
 		// Don't do this, check beforehand
@@ -211,8 +211,477 @@ inline void COMMS_helper_getData(comStruct* st, uint32_t length, uint8_t *buf){
 	}
 }
 
+// Copy data from start to position+start-1 into *buf
+inline void COMMS_helper_peekData(const uint8_t *inData, uint32_t start, uint32_t length, uint8_t * buf){
+	uint32_t counter = 0;
+	for (counter = 0; counter < length; counter++){
+		buf[counter] = inData[(start + counter) & cyclicBufferSizeMask];
+	}
+}
+
 // Returns how much time has passed, since data last sent
 uint32_t COMMS_helper_timeSinceSent(comStruct* st){
 
 	return _CP0_GET_COUNT() - st->timeStamp;	// Read2 - read1, should wrap nicely.
 }
+
+///////////////////////////////////////////////////////////////////
+// Function to setup how many cycles to delay when doing CLKs
+// Note this is important for BITBANG mode.
+// Ideally, we'd use something like SPI that has nice even edges,
+// but in bitbang mode we have to make do.
+// TODO - move to transport layer or something.
+void COMMS_helper_setClkDelay(uint32_t frequency){
+	// Check some upper limit
+	if (frequency > 5000000){
+		frequency = 5000000;
+	}
+
+	clkDelay = (10000000 / frequency) / 2;	// Get 100ns worth of ticks per clock edge.
+}
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+// OLD COMMS CODE just modified
+
+
+// Our main function here.
+void COMMS_handleIncomingProg(void){
+	uint32_t startPos = progOUTstruct.tail;
+	uint32_t endPos = progOUTstruct.head;
+
+	// At this point, also check for timeout
+	// -> If that hasn't been clocked in for a while, clear buffers and send error or something.
+
+	if (type_empty == packetHelper.type){
+		while (startPos != endPos){
+			if ('i' == progOUTstruct.data[startPos]){
+				packetHelper.type = type_info;
+				startPos = (startPos+1) & cyclicBufferSizeMask;
+				break;
+			}
+			else if ('p' == progOUTstruct.data[startPos]){
+				packetHelper.type = type_packet;
+				startPos = (startPos+1) & cyclicBufferSizeMask;
+				break;
+			}
+		}
+
+		// If successful/parsed, update space position in buffer
+		progOUTstruct.tail = startPos;
+	}
+	if(type_info == packetHelper.type){
+		// So we got an info request.
+
+		// SEND DATA HERE.
+		COMMS_addInfoToOutput();
+
+		// RESET STRUCTURE(s) HERE
+		COMMS_reinitPacketHelper(&packetHelper);
+
+	}
+	else if (type_packet == packetHelper.type){
+		// Concatenate until full, check crc, execute (or send error)
+		while (startPos != endPos){
+
+			/*
+			// Save into tempBuffer, not feelign like more right now.
+			tempBuffer[incomingData.currentPos++] = incomingData.data[startPos];
+			startPos = (startPos+1) & cyclicBufferSizeMask;
+			*/
+
+			// Updated version, that does everything in-situ
+			if (0 == packetHelper.expectedLength){
+				if (COMMS_helper_dataLen(&progOUTstruct) >= 2){
+					// If enough data in buffer, calculate length of packet
+					//packetHelper.expectedLength = ((uint16_t)tempBuffer[1] << 8) | (uint16_t)tempBuffer[0];
+					packetHelper.expectedLength = (uint16_t)progOUTstruct.data[startPos];
+					startPos = (startPos+1) & cyclicBufferSizeMask;
+					packetHelper.expectedLength = packetHelper.expectedLength | (uint16_t)progOUTstruct.data[startPos] << 8;
+					startPos = (startPos+1) & cyclicBufferSizeMask;
+					packetHelper.currentPos = 0;
+
+					// If successful/parsed, update space position in buffer
+					progOUTstruct.tail = startPos;
+				}
+				else{
+					// Not enough data available to infer length.
+					break;
+				}
+
+			}
+
+
+			if (COMMS_helper_dataLen(&progOUTstruct) >= packetHelper.expectedLength){
+				// Calculate crc
+				uint8_t tempCrc = 0;
+				uint16_t tempCounter = 0;
+				uint32_t tempTail = startPos;
+				// Add all bytes from start to end-1 (where crc is)
+				for (tempCounter = 0; tempCounter < packetHelper.expectedLength-1; tempCounter++){
+					tempCrc = tempCrc + progOUTstruct.data[tempTail];
+					tempTail = (tempTail+1) & cyclicBufferSizeMask;
+				}
+				// tempTail is already at proper position
+				if(tempCrc == progOUTstruct.data[tempTail]){
+					// Valid CRC!
+					packetHelper.status = status_parsed;
+
+					// At this point, go and do something about ALL of the commands.
+					COMMS_commandExecutor();
+
+					// Clear structures
+					COMMS_reinitPacketHelper();
+					break;
+				}
+				else{
+					// Error in decoding
+					packetHelper.status = status_error;
+
+					// Do something about it? Yes, send "error".
+					// TODO
+
+					// Clear structures
+					COMMS_reinitPacketHelper(&packetHelper);
+					break;
+				}
+				// If successful/parsed, update space position in buffer
+				progOUTstruct.tail = (startPos + packetHelper.expectedLength) & cyclicBufferSizeMask;
+			}
+
+		}
+	}
+
+}
+
+void COMMS_addInfoToOutput(){
+	// Send information about the device to PC
+	// A long time ago info output got hardcoded to 128B.
+	uint8_t emptyFluff [128 - sizeof(info.name) - sizeof(info.mcu) - sizeof(info.mode) - sizeof(info.revision)]
+	COMMS_helper_addToBuf(progRETstruct, info.name, sizeof(info.name));
+	COMMS_helper_addToBuf(progRETstruct, info.mcu, sizeof(info.mcu));
+	COMMS_helper_addToBuf(progRETstruct, info.mode, sizeof(info.mode));
+	COMMS_helper_addToBuf(progRETstruct, info.revision, sizeof(info.revision));
+
+	// Pad to 128 with \0
+	memset(emptyFluff, 0, sizeof(emptyFluff));
+	COMMS_helper_addToBuf(progRETstruct, emptyFluff, sizeof(emptyFluff));
+}
+
+// Make different later?
+void COMMS_addDataToOutput_64b(uint64_t data){
+	// Possibly check endianness
+	COMMS_helper_addToBuf(progRETstruct, &data, sizeof(data));
+}
+
+void COMMS_addDataToOutput_32b(uint32_t data){
+	// Possibly check endianness
+	COMMS_helper_addToBuf(progRETstruct, &data, sizeof(data));
+}
+
+void COMMS_commandExecutor(){
+	uint32_t counter;
+	uint32_t startPos = progOUTstruct.tail;
+	uint32_t stopPos = (startPos + packetHelper.expectedLength) & cyclicBufferSizeMask; // I'm sure there's an off-by-1 error somewhere.
+
+	if (packetHelper.status != status_parsed){
+		return;
+	}
+
+	// Start at position 0 in the packet (reset earlier ><).
+	for (counter = 0; counter < (packetHelper.expectedLength); ){
+		uint8_t dataAtCounter;
+		COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + counter, 1, &dataAtCounter);
+		//uint8_t dataAtCounter = progOUTstruct.data[(progOUTstruct.tail + counter) & cyclicBufferSizeMask]; // I have regrets
+
+		if (COMMAND_GET_INFO == dataAtCounter){
+			// Similar as in INFO. Fixed at 128 bytes.
+			COMMS_addInfoToOutput();
+			COMMS_reinitPacketHelper(&packetHelper);
+			counter = counter + 1;	// These _should_ be defines (lengths)
+		}
+		else if (COMMAND_SET_SPEED == dataAtCounter){
+			// Currently not supported, so skip
+			// Speed will be in 2 bytes (kHz)
+			// TODO - functionality is here, just implement when everything else is back working.
+			counter = counter + 3;
+		}
+		else if (COMMAND_SET_PROG_MODE == dataAtCounter){
+			// The mode is in the next byte.
+			uint8_t
+			transportSetup(tempBuffer[counter+1]);
+			counter = counter + 2;
+		}
+		else if (COMMAND_SET_PIN_IO_MODE == dataAtCounter){
+			// First byte is pin
+			// Second byte is mode (input, output /w high, output / low)
+			if (PIN_TMS == tempBuffer[counter+1]){
+				GPIODrv_setupPinTMS(tempBuffer[counter+2]);
+			}
+			else if (PIN_TCK == tempBuffer[counter+1]){
+				GPIODrv_setupPinTCK(tempBuffer[counter+2]);
+			}
+			else if (PIN_TDI == tempBuffer[counter+1]){
+				GPIODrv_setupPinTDI(tempBuffer[counter+2]);
+			}
+			else if (PIN_TDO == tempBuffer[counter+1]){
+				GPIODrv_setupPinTDO(tempBuffer[counter+2]);
+			}
+			else if (PIN_MCLR == tempBuffer[counter+1]){
+				GPIODrv_setupPinMCLR(tempBuffer[counter+2]);
+			}
+
+			counter = counter + 3;
+		}
+		else if (COMMAND_SET_PIN_WRITE == dataAtCounter){
+			// First byte is pin
+			// Second byte is value (high, low).
+			if (PIN_TMS == tempBuffer[counter+1]){
+				GPIODrv_setStateTMS(tempBuffer[counter+2]);
+			}
+			else if (PIN_TCK == tempBuffer[counter+1]){
+				GPIODrv_setStateTCK(tempBuffer[counter+2]);
+			}
+			else if (PIN_TDI == tempBuffer[counter+1]){
+				GPIODrv_setStateTDI(tempBuffer[counter+2]);
+			}
+			else if (PIN_TDO == tempBuffer[counter+1]){
+				GPIODrv_setStateTDO(tempBuffer[counter+2]);
+			}
+			else if (PIN_MCLR == tempBuffer[counter+1]){
+				GPIODrv_setStateMCLR(tempBuffer[counter+2]);
+			}
+
+			counter = counter + 3;
+		}
+		else if (COMMAND_SET_PIN_READ == dataAtCounter){
+			// First byte is pin
+			uint32_t returnVal = 0;
+			uint8_t temp = COMMS_helper_peekData(prog)
+			if (PIN_TMS == tempBuffer[counter+1]){
+				returnVal = GPIODrv_getStateTMS();
+			}
+			else if (PIN_TCK == tempBuffer[counter+1]){
+				returnVal = GPIODrv_getStateTCK();
+			}
+			else if (PIN_TDI == tempBuffer[counter+1]){
+				returnVal = GPIODrv_getStateTDI();
+			}
+			else if (PIN_TDO == tempBuffer[counter+1]){
+				returnVal = GPIODrv_getStateTDO();
+			}
+			else if (PIN_MCLR == tempBuffer[counter+1]){
+				returnVal = GPIODrv_getStateMCLR();
+			}
+
+			// TODO implement return.
+			COMMS_addDataToOutput_32b(returnVal);
+
+			counter = counter + 2;
+		}
+		else if (COMMAND_SEND == dataAtCounter){
+			// 4B of TMS_prolog nbits, 4B of TMS_prolog value
+			// 4B of TDI nbits, 8B of TDI value
+			// 4B of TMS_epilog nbits, 4B of TMS_epilog value
+			// 4B of read_flag
+			// TODO optimize later.
+
+			uint32_t tms_prolog_nbits, tms_prolog;
+			uint32_t tdi_nbits;
+			uint64_t tdi;
+			uint32_t tms_epilog_nbits, tms_epilog;
+			uint32_t read_flag;
+
+			uint32_t location = counter + 1;
+
+			volatile uint64_t returnVal = 0;
+
+			// TMS prolog
+			memcpy(&tms_prolog_nbits, &tempBuffer[location], sizeof(tms_prolog_nbits));
+			location = location + sizeof(tms_prolog_nbits);
+			memcpy(&tms_prolog, &tempBuffer[location], sizeof(tms_prolog));
+			location = location + sizeof(tms_prolog);
+
+			// TDI
+			memcpy(&tdi_nbits, &tempBuffer[location], sizeof(tdi_nbits));
+			location = location + sizeof(tdi_nbits);
+			memcpy(&tdi, &tempBuffer[location], sizeof(tdi));
+			location = location + sizeof(tdi);
+
+			// TMS epilog
+			memcpy(&tms_epilog_nbits, &tempBuffer[location], sizeof(tms_epilog_nbits));
+			location = location + sizeof(tms_epilog_nbits);
+			memcpy(&tms_epilog, &tempBuffer[location], sizeof(tms_epilog));
+			location = location + sizeof(tms_epilog);
+
+			// read flag
+			memcpy(&read_flag, &tempBuffer[location], sizeof(read_flag));
+			location = location + sizeof(read_flag);
+
+			counter = counter + 1;
+			counter = counter + sizeof(tms_prolog_nbits) + sizeof(tms_prolog);
+			counter = counter + sizeof(tdi_nbits) + sizeof(tdi);
+			counter = counter + sizeof(tms_epilog_nbits) + sizeof(tms_epilog);
+			counter = counter + sizeof(read_flag);
+
+			if (PROG_MODE_TRISTATE == transport_currentMode){
+				// Do nothing?
+			}
+			else if(PROG_MODE_JTAG == transport_currentMode){
+				returnVal = transportSendJTAG(tms_prolog_nbits, tms_prolog, tdi_nbits, tdi, tms_epilog_nbits, tms_epilog);
+			}
+			else if(PROG_MODE_ICSP == transport_currentMode){
+				returnVal = transportSendICSP(tms_prolog_nbits, tms_prolog, tdi_nbits, tdi, tms_epilog_nbits, tms_epilog);
+			}
+
+			if (read_flag > 0){
+				COMMS_addDataToOutput_64b(returnVal);
+				// Sending shall be done when parsing the packet is done, or when a special command is parsed.
+			}
+		}
+		else if (COMMAND_XFER_INSTRUCTION == tempBuffer[counter]){
+
+			uint32_t maxCounter = 0;
+			uint32_t maxLimit = 40;	// Just a define
+
+			uint32_t controlVal = 0;
+			uint32_t instruction = 0;
+
+			// instruction is at counter+1
+			memcpy(&instruction, &tempBuffer[counter+1], sizeof(instruction));
+			counter = counter + 1 + sizeof(instruction);
+
+
+			COMMS_pic32SendCommand(ETAP_CONTROL);
+
+			// Wait until CPU is ready
+			// Check if Processor Access bit (bit 18) is set
+			do {
+				controlVal = (uint32_t)COMMS_pic32XferData(32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP | CONTROL_EJTAGBRK), 1);    // Send data, read
+				if (!(controlVal & CONTROL_PROBEN)){
+					// Note - xfer instruction, ctl was %08x\n
+					maxCounter++;
+					if (maxCounter >= maxLimit){
+						// Processor still not ready :/, give up.
+						break;
+					}
+				}
+			} while ( !(controlVal & CONTROL_PROBEN));
+
+			if (maxCounter < maxLimit){
+				// Select Data Register
+				COMMS_pic32SendCommand(ETAP_DATA);    // ETAP_DATA
+
+				/* Send the instruction */
+				COMMS_pic32XferData(32, instruction, 0);  // Send instruction, don't read
+
+				// Tell CPU to execute instruction
+				COMMS_pic32SendCommand(ETAP_CONTROL); // ETAP_CONTROL
+
+				/* Send data. */
+				COMMS_pic32XferData(32, (CONTROL_PROBEN | CONTROL_PROBTRAP), 0);   // Send data, don't read
+
+				// Return status, so application knows what's happening
+				COMMS_addDataToOutput_64b(0);
+			}
+			else{
+				COMMS_addDataToOutput_64b(0x80000000);	// -1 in case of FAIL.
+			}
+
+		}
+		else{
+			asm("nop");
+		}
+
+	}
+
+	// At the END, send everything we have in the outgoing buffer.
+	// If there'll be a "send everything you've got right now" command, then _also_ do it then.
+	COMMS_sendStruct(&outgoingData);
+	COMMS_reinitStruct(&outgoingData, 1);
+}
+
+
+void COMMS_pic32SendCommand(uint32_t command){
+
+	// WTf?
+	// Bi mogoce morali biti == command || ... ???
+	// ... Ja, sam je ista cifra, pa zato dela. ><
+	// fuckit, popravi kasneje.
+
+	uint32_t returnVal;
+
+	if (MTAP_COMMAND != command && TAP_SW_MTAP != command
+		&& TAP_SW_ETAP != command && MTAP_IDCODE != command){   // MTAP commands
+		if (PROG_MODE_TRISTATE == transport_currentMode){
+			// Do nothing?
+		}
+		else if(PROG_MODE_JTAG == transport_currentMode){
+			returnVal = transportSendJTAG(TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
+											MTAP_COMMAND_NBITS, command,
+											TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL);
+		}
+		else if(PROG_MODE_ICSP == transport_currentMode){
+			returnVal = transportSendICSP(TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
+											MTAP_COMMAND_NBITS, command,
+											TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL);
+		}
+
+	}
+	else if (ETAP_ADDRESS != command && ETAP_DATA != command    // ETAP commands
+			&& ETAP_CONTROL != command && ETAP_EJTAGBOOT != command
+			&& ETAP_FASTDATA != command && ETAP_NORMALBOOT != command){
+		if (PROG_MODE_TRISTATE == transport_currentMode){
+			// Do nothing?
+		}
+		else if(PROG_MODE_JTAG == transport_currentMode){
+			returnVal = transportSendJTAG(TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
+											ETAP_COMMAND_NBITS, command,
+											TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL);
+		}
+		else if(PROG_MODE_ICSP == transport_currentMode){
+			returnVal = transportSendICSP(TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
+											ETAP_COMMAND_NBITS, command,
+											TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL);
+		}
+	}
+}
+
+uint64_t COMMS_pic32XferData(uint32_t nBits, uint32_t data, uint32_t readFlag){
+	volatile uint64_t returnVal = 0;
+
+	if (PROG_MODE_TRISTATE == transport_currentMode){
+		// Do nothing?
+	}
+	else if(PROG_MODE_JTAG == transport_currentMode){
+		returnVal = transportSendJTAG(TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
+										nBits, (uint64_t)data,
+										TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL);
+	}
+	else if(PROG_MODE_ICSP == transport_currentMode){
+		returnVal = transportSendICSP(TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
+										nBits, (uint64_t)data,
+										TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL);
+	}
+
+	if (readFlag > 0){
+		return returnVal;
+	}
+
+	return 0;
+}
+
+
+void COMMS_reinitPacketHelper(dataDecoder * st){
+	st->currentPos = 0;
+	st->expectedLength = 0;
+	st->type = 0;
+	st->crc = 0;
+	st->status = 0;
+}
+
+
+

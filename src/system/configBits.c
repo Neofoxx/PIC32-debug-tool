@@ -80,3 +80,14 @@
 #endif
 
 
+
+
+// Information about the device
+const infoStruct info = {
+		"MCU: MX440F256H\n",
+		"MODE: Bitbang\n",
+		"NAME: Neofoxx PIC32-debug-tool\n",
+		"REV: 1.1\n"	// MAJOR number . MINOR number.
+						// MAJOR represents the API,
+						// MINOR represents internal changes not visible to outside
+};

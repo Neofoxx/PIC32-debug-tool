@@ -44,6 +44,9 @@ uint32_t MIPS32 GetCP0Count();
 void MIPS32 SetCP0Count(uint32_t count);
 void MIPS32 INTEnableSystemMultiVectoredInt(void);
 
+void System_DelaySetTicksPer();			// Calculate how many ticks to wait for 1us and 100ns
+void System_DelayUs(uint32_t us);		// Delay for some us. BLOCKING.
+void System_Delay100ns(uint32_t nss);	// Delay for some * 100ns. BLOCKING.
 
 
 #endif	/* __SYSTEM_H_3215b7a6-1b38-4819-b612-7a53816114fe */

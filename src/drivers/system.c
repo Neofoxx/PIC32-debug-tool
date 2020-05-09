@@ -101,7 +101,11 @@
 #define PLLMULT16		0b001 // Clock is multiplied by 16
 #define PLLMULT15		0b000 // Clock is multiplied by 15
 
-//#include "system-clocks.c"
+
+uint32_t ticksPerUs = 0;		// How many ticks of CP0 per 1us
+uint32_t ticksPer100ns = 0;		// How many ticks of CP0 per 100ns
+
+
 
 /**
  * Implementation notes
@@ -530,6 +534,8 @@ void SystemConfig(uint32_t cpuCoreFrequency, uint32_t peripheralFreqDiv)
     SystemClocksCalcPeripheralClockSettings(&s, cpuCoreFrequency / peripheralFreqDiv);
     SystemClocksWriteSettings(&s);
 
+    System_DelaySetTicksPer();
+
     //RB2014 : already defined in io.c / IOsetDigital()
     //DDPCONbits.JTAGEN=0;  // PORTA is used as digital instead of JTAG
     //CFGCONbits.JTAGEN=0;  // Disable the JTAG port
@@ -578,4 +584,39 @@ void MIPS32 INTEnableSystemMultiVectoredInt(void)
 }
 
 
+// Some Delay things.
+static void System_DelaySetTicksPerUs(){
+	// Calculate how many ticks to wait for 1us
+	// CP0 runs at FSYS/2. Divide by 1000000 to get ticks/us
+	ticksPerUs = (GetSystemClock() / 2) / 1000000;
+}
 
+static void System_DelaySetTicksPer100ns(){
+	// Calculate how many ticks to wait for 1us
+	// CP0 runs at FSYS/2. Divide by 1000000 to get ticks/us
+	ticksPer100ns = ticksPerUs / 10;
+}
+
+void System_DelaySetTicksPer(){
+	System_DelaySetTicksPerUs();
+	System_DelaySetTicksPer100ns();
+}
+
+
+
+// Note, this should really be inlined (PROPERLY), so it would be faster
+void System_DelayUs(uint32_t us){
+	// Delay for some us. BLOCKING.
+	// Prerequisite - call System_DelaySetTicksPer every time after changing CPU frequency
+	uint32_t start = _CP0_GET_COUNT();
+	while ((_CP0_GET_COUNT() - start) < (ticksPerUs * us)){
+	}
+}
+
+void System_Delay100ns(uint32_t nss){
+	// Delay for some us. BLOCKING.
+	// Prerequisite - call System_DelaySetTicksPer every time after changing CPU frequency
+	uint32_t start = _CP0_GET_COUNT();
+	while ((_CP0_GET_COUNT() - start) < (ticksPer100ns * nss)){
+	}
+}

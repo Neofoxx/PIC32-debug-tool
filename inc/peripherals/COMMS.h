@@ -33,6 +33,17 @@ extern comStruct uartTXstruct;	// PC to target
 extern comStruct progOUTstruct;	// PC to target
 extern comStruct progRETstruct;	// Us to PC (Return values)
 
+// A struct that holds the information about information about packets,
+// positions, status, whatever.
+typedef struct dataDecoder{
+	uint16_t currentPos;
+	uint16_t expectedLength;
+	uint8_t type;
+	uint8_t crc;
+	uint8_t status;
+
+} dataDecoder;
+
 /*
 void COMMS_reinitStruct(commStruct *st, uint32_t cleanAll);
 void COMMS_sendStruct(commStruct *st);
@@ -59,6 +70,8 @@ uint32_t COMMS_helper_timeSinceSent(comStruct* st);
 uint32_t COMMS_helper_spaceLeft(comStruct* st);
 void COMMS_helper_getData(comStruct* st, uint32_t length, uint8_t *buf);
 
+void COMMS_reinitPacketHelper(dataDecoder * st);
+void COMMS_helper_peekData(const uint8_t *inData, uint32_t start, uint32_t length, uint8_t * buf);
 
 
 #endif

@@ -72,6 +72,8 @@ void setup(){
 	SystemConfig(80000000L, 1);	// Set to 80MHz
 #endif
 
+	System_DelaySetTicksPer();
+
 	GPIODrv_init();
 	LED_init();
 	BTN_init();
@@ -159,6 +161,11 @@ INTERRUPT(USB1Interrupt){
 		if (!COMMS_USB_uartRX_transmitBuf()){
 			packetCounter++;
 		}
+
+		// TODO - add DMA that automatically reads data from UART into a buffer.
+		// TODO - then in the ISR copy into circular buffer (if space), and rearm
+		// TODO - expand with timeSinceLastModified && dataInBuffer -> abort DMA.
+		// TODO - ISR then hadles normal (as above) & abort in the same way = speed.
 	}
 
 	////////////////////////////////////////////////////////////
