@@ -394,7 +394,8 @@ void COMMS_commandExecutor(){
 	}
 
 	// Start at position 0 in the packet (reset earlier ><).
-	for (counter = 0; counter < (packetHelper.expectedLength - 1); ){	// CRC ><
+	//for (counter = 0; counter < (packetHelper.expectedLength - 1); ){	// CRC ><
+	for (counter = 0; counter+1 < (packetHelper.expectedLength); ){	// Hunting another issue.
 		uint8_t dataAtCounter;
 		COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + counter, 1, &dataAtCounter);
 		//uint8_t dataAtCounter = progOUTstruct.data[(progOUTstruct.tail + counter) & cyclicBufferSizeMask]; // I have regrets
