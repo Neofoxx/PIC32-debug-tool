@@ -287,17 +287,11 @@ void COMMS_handleIncomingProg(void){
 	}
 	else if (type_packet == packetHelper.type){
 		// Concatenate until full, check crc, execute (or send error)
-		while (startPos != endPos){
-
-			/*
-			// Save into tempBuffer, not feelign like more right now.
-			tempBuffer[incomingData.currentPos++] = incomingData.data[startPos];
-			startPos = (startPos+1) & cyclicBufferSizeMask;
-			*/
+		//while (startPos != endPos){
 
 			// Updated version, that does everything in-situ
 			if (0 == packetHelper.expectedLength){
-				if (COMMS_helper_dataLen(&progOUTstruct) >= 2){
+					if (COMMS_helper_dataLen(&progOUTstruct) >= 2){
 					// If enough data in buffer, calculate length of packet
 					//packetHelper.expectedLength = ((uint16_t)tempBuffer[1] << 8) | (uint16_t)tempBuffer[0];
 					packetHelper.expectedLength = (uint16_t)progOUTstruct.data[startPos];
@@ -311,13 +305,13 @@ void COMMS_handleIncomingProg(void){
 				}
 				else{
 					// Not enough data available to infer length.
-					break;
+					//break;
 				}
 
 			}
 
 
-			if (COMMS_helper_dataLen(&progOUTstruct) >= packetHelper.expectedLength){
+			if ((COMMS_helper_dataLen(&progOUTstruct) >= packetHelper.expectedLength) && (0 != packetHelper.expectedLength)){
 				// Calculate crc
 				uint8_t tempCrc = 0;
 				uint16_t tempCounter = 0;
@@ -327,6 +321,7 @@ void COMMS_handleIncomingProg(void){
 					tempCrc = tempCrc + progOUTstruct.data[tempTail];
 					tempTail = (tempTail+1) & cyclicBufferSizeMask;
 				}
+
 				// tempTail is already at proper position
 				if(tempCrc == progOUTstruct.data[tempTail]){
 					// Valid CRC!
@@ -335,9 +330,12 @@ void COMMS_handleIncomingProg(void){
 					// At this point, go and do something about ALL of the commands.
 					COMMS_commandExecutor();
 
+					// If successful/parsed, update space position in buffer
+					progOUTstruct.tail = (startPos + packetHelper.expectedLength) & cyclicBufferSizeMask;
+
 					// Clear structures
 					COMMS_reinitPacketHelper(&packetHelper);
-					break;
+					//break;
 				}
 				else{
 					// Error in decoding
@@ -346,15 +344,18 @@ void COMMS_handleIncomingProg(void){
 					// Do something about it? Yes, send "error".
 					// TODO
 
+					// If successful/parsed, update space position in buffer
+					progOUTstruct.tail = (startPos + packetHelper.expectedLength) & cyclicBufferSizeMask;
+
 					// Clear structures
 					COMMS_reinitPacketHelper(&packetHelper);
-					break;
+					//break;
 				}
-				// If successful/parsed, update space position in buffer
-				progOUTstruct.tail = (startPos + packetHelper.expectedLength) & cyclicBufferSizeMask;
+
 			}
 
-		}
+
+		//}
 	}
 
 }
@@ -394,8 +395,7 @@ void COMMS_commandExecutor(){
 	}
 
 	// Start at position 0 in the packet (reset earlier ><).
-	//for (counter = 0; counter < (packetHelper.expectedLength - 1); ){	// CRC ><
-	for (counter = 0; counter+1 < (packetHelper.expectedLength); ){	// Hunting another issue.
+	for (counter = 0; counter < (packetHelper.expectedLength - 1); ){	// CRC ><
 		uint8_t dataAtCounter;
 		COMMS_helper_peekData(progOUTstruct.data, progOUTstruct.tail + counter, 1, &dataAtCounter);
 		//uint8_t dataAtCounter = progOUTstruct.data[(progOUTstruct.tail + counter) & cyclicBufferSizeMask]; // I have regrets
@@ -403,7 +403,6 @@ void COMMS_commandExecutor(){
 		if (COMMAND_GET_INFO == dataAtCounter){
 			// Similar as in INFO. Fixed at 128 bytes.
 			COMMS_addInfoToOutput();
-			COMMS_reinitPacketHelper(&packetHelper);
 			counter = counter + 1;	// These _should_ be defines (lengths)
 		}
 		else if (COMMAND_SET_SPEED == dataAtCounter){
