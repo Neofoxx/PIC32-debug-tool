@@ -65,8 +65,12 @@ uint64_t transportSendJTAG(	uint32_t tms_header_nbits, uint32_t tms_header_val,
 		GPIODrv_setStateTMS((tms_header_val & 0x01) ? GPIO_HIGH : GPIO_LOW);
 		GPIODrv_setStateTDI(GPIO_LOW);
 		GPIODrv_setStateTCK(GPIO_HIGH);
-		// Nops?
+		// Nops? YES
+		asm("nop");
+		asm("nop");
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
 		tms_header_val = tms_header_val >> 1;	// Remove the sent bit
 	}
 
@@ -74,25 +78,37 @@ uint64_t transportSendJTAG(	uint32_t tms_header_nbits, uint32_t tms_header_val,
 
 	// Data. Special case for last bit - shares with TMS = 1!
 	for (;data_nbits>0; data_nbits--){
+
 		GPIODrv_setStateTDI((data_val & 0x01) ? GPIO_HIGH : GPIO_LOW);
 		if (data_nbits == 1){
 			GPIODrv_setStateTMS(GPIO_HIGH);
 		}
 		GPIODrv_setStateTCK(GPIO_HIGH);
+		asm("nop");
+		asm("nop");
 		// Nops?
-		returnVal = (returnVal >> 1) | (GPIODrv_getStateTDO() ? ((uint64_t)1<<63): 0);
+		//returnVal = (returnVal >> 1) | (GPIODrv_getStateTDO() ? ((uint64_t)1<<63): 0);	// 15 instructions
+		returnVal = (returnVal >> 1) | ((uint64_t)GPIODrv_getStateTDO()<<63);				// 13 instructions
 		counterOfBits++;
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
 		data_val = data_val >> 1;				// Remove the sent bit
+
 	}
+
 
 	// TMS epilogue. Has one bit less, because of TMS bit in code above!
 	for (;tms_epilogue_nbits; tms_epilogue_nbits--){
 		GPIODrv_setStateTDI(GPIO_LOW);
 		GPIODrv_setStateTMS((tms_epilogue_val & 0x01) ? GPIO_HIGH : GPIO_LOW);
 		GPIODrv_setStateTCK(GPIO_HIGH);
+		asm("nop");
+		asm("nop");
 		tms_epilogue_val = tms_epilogue_val >> 1;				// Remove the sent bit
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
 	}
 
 	// Align LSB to 0 bit. For PrACC bit, shift >> 1 to remove it.
@@ -111,10 +127,6 @@ uint64_t transportSendICSP(	uint32_t tms_header_nbits, uint32_t tms_header_val,
 	volatile uint64_t returnVal = 0;
 	volatile uint32_t counterOfBits = 0;
 
-	if (tms_header_val == 0x1F){
-		asm("nop");
-	}
-
 	// TMS header
 	for (;tms_header_nbits>0; tms_header_nbits--){
 
@@ -122,16 +134,26 @@ uint64_t transportSendICSP(	uint32_t tms_header_nbits, uint32_t tms_header_val,
 		GPIODrv_setStateTCK(GPIO_HIGH);
 		GPIODrv_setStateTMS(GPIO_LOW);	// Send TDI bit = 0
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
+
+
 
 		// Send TMS
 		GPIODrv_setStateTCK(GPIO_HIGH);
 		GPIODrv_setStateTMS((tms_header_val & 0x01) ? GPIO_HIGH : GPIO_LOW);
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
+
 
 		// Change output to  input
 		GPIODrv_setStateTCK(GPIO_HIGH);
 		GPIODrv_setupPinTMS(GPIO_mode_input);
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
+
 
 		// Read TDO bit
 		GPIODrv_setStateTCK(GPIO_HIGH);
@@ -155,6 +177,9 @@ uint64_t transportSendICSP(	uint32_t tms_header_nbits, uint32_t tms_header_val,
 		GPIODrv_setStateTCK(GPIO_HIGH);
 		GPIODrv_setStateTMS((data_val & 0x01) ? GPIO_HIGH : GPIO_LOW);	// Send TDI bit
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
+
 
 		// Send TMS
 		GPIODrv_setStateTCK(GPIO_HIGH);
@@ -165,17 +190,24 @@ uint64_t transportSendICSP(	uint32_t tms_header_nbits, uint32_t tms_header_val,
 			GPIODrv_setStateTMS(GPIO_LOW);	// Else, send 0
 		}
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
+
 
 		// Change output to  input
 		GPIODrv_setStateTCK(GPIO_HIGH);
 		GPIODrv_setupPinTMS(GPIO_mode_input);
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
+
 
 
 		// Read TDO bit. Don't read on last output bit, special case
 		GPIODrv_setStateTCK(GPIO_HIGH);
 		if (data_nbits > 1){
-			returnVal = (returnVal >> 1) | (GPIODrv_getStateTMS() ? ((uint64_t)1<<63): 0);
+			//returnVal = (returnVal >> 1) | (GPIODrv_getStateTMS() ? ((uint64_t)1<<63): 0);		// 15 instructions
+			returnVal = (returnVal >> 1) | ((uint64_t)GPIODrv_getStateTDO()<<63);				// 13 instructions
 			counterOfBits++;
 		}
 		GPIODrv_setStateTCK(GPIO_LOW);
@@ -194,20 +226,32 @@ uint64_t transportSendICSP(	uint32_t tms_header_nbits, uint32_t tms_header_val,
 		GPIODrv_setStateTCK(GPIO_HIGH);
 		GPIODrv_setStateTMS(GPIO_LOW);	// Send TDI bit = 0
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
+
 
 		// Send TMS
 		GPIODrv_setStateTCK(GPIO_HIGH);
 		GPIODrv_setStateTMS((tms_epilogue_val & 0x01) ? GPIO_HIGH : GPIO_LOW);
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
+
 
 		// Change output to  input
 		GPIODrv_setStateTCK(GPIO_HIGH);
 		GPIODrv_setupPinTMS(GPIO_mode_input);
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
+
 
 		GPIODrv_setStateTCK(GPIO_HIGH);
 		tms_epilogue_val = tms_epilogue_val >> 1;				// Remove the sent bit
 		GPIODrv_setStateTCK(GPIO_LOW);
+		asm("nop");
+		asm("nop");
+
 
 		// Reset TMS direction
 		GPIODrv_setupPinTMS(GPIO_mode_output_low);	// Grr.

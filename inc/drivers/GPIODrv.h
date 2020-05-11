@@ -233,17 +233,33 @@
 
 // Function definitons
 void GPIODrv_init();
-
+/*
 void GPIODrv_setupPinTMS(uint32_t mode);
 void GPIODrv_setupPinTCK(uint32_t mode);
 void GPIODrv_setupPinTDI(uint32_t mode);
 void GPIODrv_setupPinTDO(uint32_t mode);
 void GPIODrv_setupPinMCLR(uint32_t mode);
+*/
 
-void GPIODrv_setStateTMS(uint32_t state);
-// Optimize later. Static inline works just fine (and too fast :p)
-void GPIODrv_setStateTCK(uint32_t state);
+
+
 /*
+void GPIODrv_setStateTMS(uint32_t state);
+void GPIODrv_setStateTCK(uint32_t state);
+void GPIODrv_setStateTDI(uint32_t state);
+void GPIODrv_setStateTDO(uint32_t state);
+void GPIODrv_setStateMCLR(uint32_t state);
+*/
+
+// inlined versions of setting states
+static inline void GPIODrv_setStateTMS(uint32_t state){
+	if (state == GPIO_HIGH){
+		PROG_TMS_LATSET = PROG_TMS_MASK;
+	}
+	else{
+		PROG_TMS_LATCLR = PROG_TMS_MASK;
+	}
+}
 static inline void GPIODrv_setStateTCK(uint32_t state){
 	if (state == GPIO_HIGH){
 		PROG_TCK_LATSET = PROG_TCK_MASK;
@@ -252,16 +268,148 @@ static inline void GPIODrv_setStateTCK(uint32_t state){
 		PROG_TCK_LATCLR = PROG_TCK_MASK;
 	}
 }
-*/
-void GPIODrv_setStateTDI(uint32_t state);
-void GPIODrv_setStateTDO(uint32_t state);
-void GPIODrv_setStateMCLR(uint32_t state);
 
+static inline void GPIODrv_setStateTDI(uint32_t state){
+	if (state == GPIO_HIGH){
+		PROG_TDI_LATSET = PROG_TDI_MASK;
+	}
+	else{
+		PROG_TDI_LATCLR = PROG_TDI_MASK;
+	}
+}
+
+static inline void GPIODrv_setStateTDO(uint32_t state){
+	if (state == GPIO_HIGH){
+		PROG_TDO_LATSET = PROG_TDO_MASK;
+	}
+	else{
+		PROG_TDO_LATCLR = PROG_TDO_MASK;
+	}
+}
+
+static inline void GPIODrv_setStateMCLR(uint32_t state){
+	// For MCLR, maybe add an inverse option?
+	if (state == GPIO_HIGH){
+		PROG_MCLR_LATSET = PROG_MCLR_MASK;
+	}
+	else{
+		PROG_MCLR_LATCLR = PROG_MCLR_MASK;
+	}
+}
+
+/*
 uint32_t GPIODrv_getStateTMS();
 uint32_t GPIODrv_getStateTCK();
 uint32_t GPIODrv_getStateTDI();
 uint32_t GPIODrv_getStateTDO();
 uint32_t GPIODrv_getStateMCLR();
+*/
+// inlined versions of getting pin states
+static inline uint32_t GPIODrv_getStateTMS(){
+	if (PROG_TMS_PORTbits.PROG_TMS_PORTPIN){
+		return 1;
+	}
+	return 0;
+}
+
+static inline uint32_t GPIODrv_getStateTCK(){
+	if (PROG_TCK_PORTbits.PROG_TCK_PORTPIN){
+		return 1;
+	}
+	return 0;
+}
+
+static inline uint32_t GPIODrv_getStateTDI(){
+	if (PROG_TDI_PORTbits.PROG_TDI_PORTPIN){
+		return 1;
+	}
+	return 0;
+}
+
+static inline uint32_t GPIODrv_getStateTDO(){
+	if (PROG_TDO_PORTbits.PROG_TDO_PORTPIN){
+		return 1;
+	}
+	return 0;
+}
+
+static inline uint32_t GPIODrv_getStateMCLR(){
+	if (PROG_MCLR_PORTbits.PROG_MCLR_PORTPIN){
+		return 1;
+	}
+	return 0;
+}
+
+// inlined versions of setting up pins
+static inline void GPIODrv_setupPinTMS(uint32_t mode){
+	if (mode == GPIO_mode_input){
+		PROG_TMS_TRISbits.PROG_TMS_TRISPIN = 1;	// 1 is input
+	}
+	else if (mode == GPIO_mode_output_high){
+		GPIODrv_setStateTMS(GPIO_HIGH);			// Preset state
+		PROG_TMS_TRISbits.PROG_TMS_TRISPIN = 0;	// 0 is output
+	}
+	else if (mode == GPIO_mode_output_low){
+		GPIODrv_setStateTMS(GPIO_LOW);			// Preset state
+		PROG_TMS_TRISbits.PROG_TMS_TRISPIN = 0;	// 0 is output
+	}
+}
+
+static inline void GPIODrv_setupPinTCK(uint32_t mode){
+	if (mode == GPIO_mode_input){
+		PROG_TCK_TRISbits.PROG_TCK_TRISPIN = 1;	// 1 is input
+	}
+	else if (mode == GPIO_mode_output_high){
+		PROG_TCK_LATSET = PROG_TCK_MASK;		// Preset state
+		PROG_TCK_TRISbits.PROG_TCK_TRISPIN = 0;	// 0 is output
+	}
+	else if (mode == GPIO_mode_output_low){
+		PROG_TCK_LATCLR = PROG_TCK_MASK;		// Preset state
+		PROG_TCK_TRISbits.PROG_TCK_TRISPIN = 0;	// 0 is output
+	}
+}
+
+static inline void GPIODrv_setupPinTDI(uint32_t mode){
+	if (mode == GPIO_mode_input){
+		PROG_TDI_TRISbits.PROG_TDI_TRISPIN = 1;	// 1 is input
+	}
+	else if (mode == GPIO_mode_output_high){
+		PROG_TDI_LATSET = PROG_TDI_MASK;		// Preset state
+		PROG_TDI_TRISbits.PROG_TDI_TRISPIN = 0;	// 0 is output
+	}
+	else if (mode == GPIO_mode_output_low){
+		PROG_TDI_LATCLR = PROG_TDI_MASK;		// Preset state
+		PROG_TDI_TRISbits.PROG_TDI_TRISPIN = 0;	// 0 is output
+	}
+}
+
+static inline void GPIODrv_setupPinTDO(uint32_t mode){
+	if (mode == GPIO_mode_input){
+		PROG_TDO_TRISbits.PROG_TDO_TRISPIN = 1;	// 1 is input
+	}
+	else if (mode == GPIO_mode_output_high){
+		PROG_TDO_LATSET = PROG_TDO_MASK;		// Preset state
+		PROG_TDO_TRISbits.PROG_TDO_TRISPIN = 0;	// 0 is output
+	}
+	else if (mode == GPIO_mode_output_low){
+		PROG_TDO_LATCLR = PROG_TDO_MASK;		// Preset state
+		PROG_TDO_TRISbits.PROG_TDO_TRISPIN = 0;	// 0 is output
+	}
+}
+
+static inline void GPIODrv_setupPinMCLR(uint32_t mode){
+	if (mode == GPIO_mode_input){
+		PROG_MCLR_TRISbits.PROG_MCLR_TRISPIN = 1;	// 1 is input
+	}
+	else if (mode == GPIO_mode_output_high){
+		PROG_MCLR_LATSET = PROG_MCLR_MASK;			// Preset state
+		PROG_MCLR_TRISbits.PROG_MCLR_TRISPIN = 0;	// 0 is output
+	}
+	else if (mode == GPIO_mode_output_low){
+		PROG_MCLR_LATCLR = PROG_MCLR_MASK;			// Preset state
+		PROG_MCLR_TRISbits.PROG_MCLR_TRISPIN = 0;	// 0 is output
+	}
+}
 
 // UART things
 void GPIODrv_setRTS(uint32_t state);

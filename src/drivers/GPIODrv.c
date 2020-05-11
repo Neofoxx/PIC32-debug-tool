@@ -18,6 +18,7 @@ void GPIODrv_init(){
 // Pin setup
 ////////////
 
+/*
 void GPIODrv_setupPinTMS(uint32_t mode){
 	if (mode == GPIO_mode_input){
 		PROG_TMS_TRISbits.PROG_TMS_TRISPIN = 1;	// 1 is input
@@ -87,12 +88,13 @@ void GPIODrv_setupPinMCLR(uint32_t mode){
 		PROG_MCLR_TRISbits.PROG_MCLR_TRISPIN = 0;	// 0 is output
 	}
 }
+*/
 
 //////////////////////////////////////////////////////////////////////
 // Setting states of pins.
 // Inefficient, but not a problem for now. Let the complier handle it.
 //////////////////////////////////////////////////////////////////////
-
+/*
 void GPIODrv_setStateTMS(uint32_t state){
 	if (state == GPIO_HIGH){
 		PROG_TMS_LATSET = PROG_TMS_MASK;
@@ -140,10 +142,11 @@ void GPIODrv_setStateMCLR(uint32_t state){
 		PROG_MCLR_LATCLR = PROG_MCLR_MASK;
 	}
 }
-
+*/
 ///////////////////
 // Read input state
 ///////////////////
+/*
 uint32_t GPIODrv_getStateTMS(){
 	if (PROG_TMS_PORTbits.PROG_TMS_PORTPIN){
 		return 1;
@@ -178,6 +181,7 @@ uint32_t GPIODrv_getStateMCLR(){
 	}
 	return 0;
 }
+*/
 
 //////////////////////////////////////////////////////////
 

@@ -605,10 +605,59 @@ void COMMS_commandExecutor(){
 				COMMS_addDataToOutput_64b(0);
 			}
 			else{
-				COMMS_addDataToOutput_64b(0x80000000);	// -1 in case of FAIL.
+				COMMS_addDataToOutput_64b(0x8000000000000000);	// -1 in case of FAIL.
 			}
 
 		}
+		else if (COMMAND_GET_PE_RESPONSE == dataAtCounter){
+
+			uint32_t maxCounter = 0;
+			uint32_t maxLimit = 40;	// Just a define
+
+			uint32_t response = 0;
+			uint32_t controlVal = 0;
+
+			uint32_t tempStart;
+			uint32_t delayTime = 20 * 40;	// in us
+
+			counter = counter + 1;
+
+			COMMS_pic32SendCommand(ETAP_CONTROL);
+
+			do {
+				tempStart = _CP0_GET_COUNT();
+				while((_CP0_GET_COUNT() - tempStart) < delayTime);
+				// There needs to be a minimum _7us_ delay between ETAP_CONTROL and here.
+				// You know, actually give the PE time to respond.
+				// (The number is probably a bit bigger, overhead and things)
+
+			    controlVal = (uint32_t)COMMS_pic32XferData(32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP | CONTROL_EJTAGBRK), 1);
+			    if (!(controlVal & CONTROL_PRACC)){
+					// Note - xfer instruction, ctl was %08x\n
+					maxCounter++;
+					if (maxCounter >= maxLimit){
+						// Processor still not ready :/, give up.
+						break;
+					}
+				}
+			} while (! (controlVal & CONTROL_PRACC));
+
+
+			if (maxCounter < maxLimit){
+				COMMS_pic32SendCommand(ETAP_DATA);    // ETAP_DATA
+
+				response = COMMS_pic32XferData(32, 0, 1);	// Send 32 zeroes, read response
+				COMMS_addDataToOutput_64b(response);
+
+				COMMS_pic32SendCommand(ETAP_CONTROL); // ETAP_CONTROL
+				COMMS_pic32XferData(32, (CONTROL_PROBEN | CONTROL_PROBTRAP), 0);   // Send data, don't read
+			}
+			else{
+				COMMS_addDataToOutput_64b(0x8000000000000000);	// -1 in case of FAIL.
+			}
+
+		}
+
 		else{
 			asm("nop");
 		}

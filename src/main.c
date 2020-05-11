@@ -63,6 +63,11 @@ void setup(){
 
 	// DO NOT setup KSEG0 (cacheable area) on MX1/MX2, debugging will NOT work
 
+	unsigned int val;
+	val = _CP0_GET_CONFIG();	// Macro present in cp0defs.h
+	val |= 0x00000003;	// Sets to KSEG0/cachable region, as per Table 2-11 in ref. manual
+	_mtc0(_CP0_CONFIG, _CP0_CONFIG_SELECT, val);	// No macro, do it as suggested in first link.
+
 	BMXCONbits.BMXWSDRM = 0;	// Set wait-states to 0
 	
 	// System config, call with desired CPU freq. and PBCLK divisor

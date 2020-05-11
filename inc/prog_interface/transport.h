@@ -21,6 +21,7 @@
 #define COMMAND_SET_PIN_READ	5	// Read pin value
 #define COMMAND_SEND			6	// Send command
 #define COMMAND_XFER_INSTRUCTION	7	// xferInstruction, but performed on MCU
+#define COMMAND_GET_PE_RESPONSE		8	// get_pe_response, but performed on MCU
 
 
 #define PROG_MODE_TRISTATE	0
